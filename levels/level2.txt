@@ -1,0 +1,97 @@
+# PulseRun Level 2 - ESCALATION
+# Faster, and combines the ideas from Level 1: orb chains, ceilings you must not jump into,
+# pads onto platforms, and saws guarding block tops.
+name ESCALATION
+number 2
+difficulty 1
+width 12000
+ground_y 500
+speed 460
+bg_color 0x0b2240
+
+# --- Warm-up ----------------------------------------------------------------
+SPIKE 500  450
+SPIKE 550  450
+SPIKE 950  450
+SPIKE 1000 450
+SPIKE 1050 450
+
+# --- Low ceiling: stay on the ground (jumping hits the underside) -------------
+BLOCK 1400 360 360 40
+SPIKE 1850 450
+
+# --- Orb chain over a long pit -----------------------------------------------
+SPIKE 2200 450
+SPIKE 2250 450
+SPIKE 2300 450
+SPIKE 2350 450
+SPIKE 2400 450
+SPIKE 2450 450
+SPIKE 2500 450
+SPIKE 2550 450
+SPIKE 2600 450
+SPIKE 2650 450
+SPIKE 2700 450
+SPIKE 2750 450
+ORB   2380 350
+ORB   2700 330
+
+# --- Pad onto a platform, saw on the platform ----------------------------------
+PAD   3150 488
+BLOCK 3400 320 480 60
+SAW   3700 290 radius=26 speed=1.4
+SPIKE 3950 450
+SPIKE 4000 450
+
+# --- Staircase up, gap, staircase down ---------------------------------------
+BLOCK 4300 440 60 60
+BLOCK 4360 380 60 120
+BLOCK 4420 320 120 180
+BLOCK 4740 320 120 180
+BLOCK 4860 380 60 120
+BLOCK 4920 440 60 60
+SPIKE 4540 450
+SPIKE 4590 450
+SPIKE 4640 450
+SPIKE 4690 450
+
+# --- Saw rhythm ---------------------------------------------------------------
+SAW   5400 470 radius=34 speed=1.6
+SAW   5800 470 radius=34 speed=1.6
+SPIKE 6150 450
+SPIKE 6200 450
+SAW   6550 400 radius=26 speed=1.0
+
+# --- Tunnel: ceiling over spikes, time a low hop -------------------------------
+BLOCK 6900 300 600 40
+SPIKE 7100 450
+SPIKE 7400 450
+
+# --- Orb over a wall ------------------------------------------------------------
+BLOCK 8000 260 60 240
+ORB   7900 330
+SPIKE 8300 450
+SPIKE 8350 450
+
+# --- Platform hop ---------------------------------------------------------------
+BLOCK 8700 420 180 80
+BLOCK 9100 360 180 140
+BLOCK 9500 420 180 80
+SPIKE 8880 450
+SPIKE 8930 450
+SPIKE 8980 450
+SPIKE 9030 450
+SPIKE 9280 450
+SPIKE 9330 450
+SPIKE 9380 450
+SPIKE 9430 450
+
+# --- Finale ---------------------------------------------------------------------
+SPIKE 10000 450
+SPIKE 10050 450
+SPIKE 10100 450
+SAW   10500 470 radius=34 speed=2
+PAD   10850 488
+BLOCK 11050 300 60 200
+SPIKE 11400 450
+PORTAL 11800 440 target=3

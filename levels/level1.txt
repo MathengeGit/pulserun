@@ -1,0 +1,84 @@
+# PulseRun Level 1 - PRIMER
+# Teaches one idea at a time: single, double, triple spikes, then orbs, saws, blocks, a pad.
+# Coordinates: BLOCK/SPIKE/PAD = top-left, SAW/ORB/PORTAL = centre. Ground surface at y=500.
+name PRIMER
+number 1
+difficulty 0
+width 10000
+ground_y 500
+speed 420
+bg_color 0x10164a
+
+# --- 1. Spikes: single, double, triple --------------------------------------
+SPIKE 400  450
+SPIKE 800  450
+SPIKE 850  450
+SPIKE 1200 450
+SPIKE 1250 450
+SPIKE 1300 450
+
+# --- 2. First orb: a pit too wide for one jump, press on the orb ------------
+SPIKE 1550 450
+SPIKE 1600 450
+SPIKE 1650 450
+SPIKE 1700 450
+SPIKE 1750 450
+SPIKE 1800 450
+SPIKE 1850 450
+SPIKE 1900 450
+ORB   1700 350
+
+# --- 3. A saw to stay under (do not jump), then one to jump over -----------
+SAW   2250 400 radius=26 speed=0.8
+SPIKE 2550 450
+
+# --- 4. Blocks: step up, run along, step down --------------------------------
+BLOCK 2800 440 60 60
+BLOCK 2860 440 60 60
+BLOCK 2920 380 180 60
+BLOCK 2920 440 180 60
+SPIKE 3150 450
+SPIKE 3200 450
+
+# --- 5. Second orb, higher --------------------------------------------------
+SPIKE 3450 450
+SPIKE 3500 450
+SPIKE 3550 450
+SPIKE 3600 450
+SPIKE 3650 450
+SPIKE 3700 450
+SPIKE 3750 450
+SPIKE 3800 450
+ORB   3620 330
+
+SAW   4100 470 radius=34 speed=1.2
+
+# --- 6. A jump pad over a tall wall -----------------------------------------
+PAD   4550 488
+BLOCK 4800 320 60 180
+
+# --- 7. Platforms with spikes on top -----------------------------------------
+BLOCK 5300 440 300 60
+SPIKE 5450 390
+BLOCK 5700 380 240 120
+SPIKE 6050 450
+SPIKE 6100 450
+
+# --- 8. Rhythm section: spaced single and double spikes ----------------------
+SPIKE 6450 450
+SPIKE 6850 450
+SPIKE 6900 450
+SPIKE 7300 450
+SPIKE 7700 450
+SPIKE 7750 450
+SAW   8100 470 radius=34 speed=1.5
+
+# --- 9. Final stairs and the exit --------------------------------------------
+BLOCK 8500 440 60 60
+BLOCK 8560 380 60 120
+BLOCK 8620 320 60 180
+SPIKE 8900 450
+SPIKE 8950 450
+SPIKE 9000 450
+SPIKE 9400 450
+PORTAL 9800 440 target=2

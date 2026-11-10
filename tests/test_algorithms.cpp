@@ -5,6 +5,8 @@
 #include "game/game_loop.h"
 #include "game/level.h"
 #include "game/player.h"
+#include "game/solver.h"
+#include "game/world.h"
 #include "math/mat3.h"
 #include "raster/circle.h"
 #include "raster/clip.h"
@@ -441,6 +443,76 @@ static void testLevelLoader() {
     CHECK(!loadLevel("no/such/level.txt", bad, &err) && err.find("cannot open") == 0);
 }
 
+// Every shipped level must load, must kill a player who does nothing, and must be beatable:
+// the solver searches jump timings, and its plan must replay deterministically to the portal.
+static void testShippedLevels() {
+    int found = 0;
+    for (int n = 1; n <= 9; ++n) {
+        Level lvl;
+        std::string err;
+        const std::string path = std::string(PULSERUN_SOURCE_DIR) + "/levels/level" + std::to_string(n) + ".txt";
+        if (!loadLevel(path, lvl, &err)) break;
+        ++found;
+        CHECK(lvl.number == n && lvl.obstacles.size() > 20);
+        World idle(&lvl);
+        while (!idle.dead && !idle.complete) idle.step(1.0f / 60, false, false);
+        CHECK(idle.dead && idle.progress() < 0.1f);
+        const SolveResult r = solveLevel(lvl);
+        CHECK(r.solved);
+        bool completed = false;
+        CHECK(replayPlan(lvl, r.held, &completed) == 1.0f && completed);
+        if (!r.solved) std::cout << "  level " << n << " unsolved, best " << (int)(r.best * 100) << "%\n";
+    }
+    CHECK(found >= 3);
+    // Level 1 follows the handoff brief: spikes at 400/800/1200, orbs near 1600 and 2800+,
+    // saws near 2000 and 3500+, a portal at 9800 leading to level 2.
+    Level l1;
+    CHECK(loadLevel(std::string(PULSERUN_SOURCE_DIR) + "/levels/level1.txt", l1));
+    auto has = [&](ObstacleType t, float lo, float hi) {
+        for (const Obstacle& o : l1.obstacles)
+            if (o.type == t && o.x >= lo && o.x <= hi) return true;
+        return false;
+    };
+    CHECK(has(ObstacleType::Spike, 400, 400) && has(ObstacleType::Spike, 800, 850) && has(ObstacleType::Spike, 1200, 1300));
+    CHECK(has(ObstacleType::Orb, 1500, 1800) && has(ObstacleType::Orb, 2800, 3700));
+    CHECK(has(ObstacleType::Saw, 1900, 2300) && has(ObstacleType::Saw, 3500, 4200));
+    CHECK(l1.endX() == 9800 && l1.nextLevel() == 2 && l1.width == 10000);
+}
+
+static void testWorld() {
+    Level lvl;
+    CHECK(parseLevel("width 3000\nORB 600 380\nPAD 1200 488\nPORTAL 2000 440 target=2\n", lvl));
+    // Holding the jump keeps re-jumping on landing.
+    World w(&lvl);
+    int jumps = 0;
+    for (int i = 0; i < 90; ++i) jumps += w.step(1.0f / 60, true, i == 0).jumped;
+    CHECK(jumps >= 2);
+    // A jump press up to 100 ms before landing is buffered.
+    World b(&lvl);
+    b.step(1.0f / 60, true, true);
+    bool sawAir = false;
+    int pressAt = -1;
+    for (int i = 0; i < 120 && pressAt < 0; ++i) {
+        b.step(1.0f / 60, false, false);
+        sawAir |= !b.player.on_ground;
+        if (sawAir && b.player.vel.y > 0 && b.player.bottom() > 500 - 25) pressAt = i;
+    }
+    bool rejumped = false;
+    b.step(1.0f / 60, false, true);
+    for (int i = 0; i < 10 && !rejumped; ++i) rejumped = b.step(1.0f / 60, false, false).jumped;
+    CHECK(pressAt >= 0 && rejumped);
+    // Pads launch higher than a jump; the portal completes the level.
+    World p(&lvl);
+    float lowest = 500;
+    bool padFired = false;
+    while (!p.complete && !p.dead) {
+        padFired |= p.step(1.0f / 60, false, false).pad;
+        if (p.player.pos.x > 1150) lowest = std::min(lowest, p.player.bottom());
+    }
+    CHECK(padFired && 500 - lowest > 250);
+    CHECK(p.complete && p.progress() == 1.0f);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -453,6 +525,8 @@ int main() {
     testPhysics();
     testCollision();
     testLevelLoader();
+    testWorld();
+    testShippedLevels();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

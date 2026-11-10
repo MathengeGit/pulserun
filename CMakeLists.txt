@@ -63,6 +63,17 @@ enable_testing()
 add_executable(test_algorithms tests/test_algorithms.cpp)
 target_link_libraries(test_algorithms pulse_core)
 add_test(NAME algorithms COMMAND test_algorithms)
+target_compile_definitions(test_algorithms PRIVATE PULSERUN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+
+# The level solver (src/game/solver.cpp) recurses once per decision frame (~2000 deep on a
+# long level); Windows' default 1 MB main-thread stack is too small for that.
+foreach(t test_algorithms pulserun)
+  if(MINGW)
+    target_link_options(${t} PRIVATE -Wl,--stack,16777216)
+  elseif(MSVC)
+    target_link_options(${t} PRIVATE /STACK:16777216)
+  endif()
+endforeach()
 
 # `cmake --build build --target screenshots` renders every demo image into docs/screenshots/.
 add_custom_target(screenshots
