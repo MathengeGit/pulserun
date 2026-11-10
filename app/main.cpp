@@ -1,11 +1,14 @@
 // PulseRun entry point: a 1280x720 window showing a 960x540 framebuffer, driven by
 // the fixed-timestep GameLoop. Headless builds (no SDL2) write a PNG instead.
 #include "core/window.h"
+#include "game/animation.h"
 #include "game/game_loop.h"
 #include "game/level.h"
 #include "game/world_render.h"
 #include "raster/font.h"
 #include "ui/ui.h"
+#include <algorithm>
+#include <cmath>
 #include <cstdio>
 #include <fstream>
 #include <string>
@@ -43,15 +46,25 @@ public:
         prevCam_ = cam_;
         if (in.hitboxPressed) opt_.hitboxes = !opt_.hitboxes;
         if (in.restartPressed) restart();
+        effects_.update(dt);
         if (world_.dead || world_.complete) {
             pause_ += dt;
-            if (pause_ > 0.6f) {
+            death_.update(dt);
+            const float shake = world_.dead ? std::max(0.0f, 0.25f - pause_) * 40.0f : 0.0f;
+            cam_.shake_x = shake * std::sin(pause_ * 90.0f);
+            cam_.shake_y = shake * std::cos(pause_ * 70.0f);
+            if (pause_ > 0.7f) {
                 if (world_.complete) start((index_ + 1) % (int)levels_.size());
                 else restart();
             }
             return;
         }
-        world_.step(dt, in.jumpHeld, in.jumpPressed);
+        const WorldEvents ev = world_.step(dt, in.jumpHeld, in.jumpPressed);
+        if (ev.orb) effects_.spawn(makeOrbPop(pal_), Vec2(world_.level->obstacles[ev.orbIndex].x, world_.level->obstacles[ev.orbIndex].y));
+        if (ev.died) {
+            death_ = makeDeathBurst(pal_, ClipRect{0, 0, 959, 539});
+            deathAt_ = world_.player.pos;
+        }
         cam_.follow(world_.player.pos, world_.level->groundY, dt);
     }
 
@@ -63,8 +76,11 @@ public:
         }
         const Camera cam = Camera::lerp(prevCam_, cam_, alpha);
         drawWorld(fb, world_, cam, alpha, pal_, opt_);
-        if (world_.dead) drawDeathBurst(fb, cam.toScreen(world_.player.pos), std::min(1.0f, pause_ * 1.6f), pal_,
-                                        ClipRect{0, 0, (double)fb.width() - 1, (double)fb.height() - 1});
+        effects_.draw(fb, cam.world_to_screen());
+        if (world_.dead) {
+            death_.draw(fb, cam.toScreen(deathAt_));
+            fb.fillRect(0, 0, fb.width(), fb.height(), withAlpha(pal_.hazard, std::max(0, 40 - (int)(pause_ * 120))));
+        }
         drawHud(fb, world_.level->number, world_.progress(), attempt_, pal_);
     }
 
@@ -82,6 +98,7 @@ private:
         cam_.reset(world_.player.pos, world_.level->groundY);
         prevCam_ = cam_;
         pause_ = 0;
+        effects_.clear();
         ++attempt_;
     }
 
@@ -90,6 +107,9 @@ private:
     Camera cam_, prevCam_;
     Palette pal_ = defaultPalette();
     RenderOptions opt_;
+    Effects effects_;
+    Animation death_;
+    Vec2 deathAt_;
     int index_ = 0, attempt_ = 1;
     float pause_ = 0;
 };

@@ -174,6 +174,23 @@ void drawPad(Framebuffer& fb, float centerX, float groundY, const Palette& pal) 
     drawEllipse(fb, cx, gy, 24, 6, rgb(255, 250, 200));
 }
 
+void drawPadCompressed(Framebuffer& fb, float centerX, float groundY, float squash, const Palette& pal) {
+    const int cx = ir(centerX), gy = ir(groundY);
+    const float lift = 3.0f + 15.0f * squash;  // plate height above the base
+    fillEllipse(fb, cx, gy, 30, 6, withAlpha(pal.accent, 60));
+    // Spring: a zigzag polyline between base and plate (thick Bresenham-free quads).
+    std::vector<Vec2> zig;
+    const int turns = 6;
+    for (int i = 0; i <= turns; ++i)
+        zig.push_back(Vec2(centerX + ((i % 2) ? 12.0f : -12.0f) * (i == 0 || i == turns ? 0.0f : 1.0f),
+                           groundY - lift * i / turns));
+    drawPolylineThick(fb, zig, 3.0f, rgb(255, 250, 200));
+    const int py = ir(groundY - lift);
+    fillEllipse(fb, cx, py, 44, 14, withAlpha(pal.accent, 40));
+    fillEllipse(fb, cx, py, 26, 6, pal.accent);
+    drawEllipse(fb, cx, py, 26, 6, rgb(255, 250, 200));
+}
+
 void drawPortal(Framebuffer& fb, Vec2 c, float hw, float hh, Color color) {
     // Each side of the portal oval is one cubic Bezier.
     for (int ring = 0; ring < 3; ++ring) {
