@@ -5,6 +5,7 @@
 #include "game/collision.h"
 #include "game/game.h"
 #include "game/game_loop.h"
+#include "game/world_render.h"
 #include "game/level.h"
 #include "game/player.h"
 #include "game/solver.h"
@@ -648,6 +649,67 @@ static void testGameFlow() {
     CHECK(g.screen() == Screen::Playing && g.world().level->number == 2);
 }
 
+// Distinct colours in a frame: a cheap "something was actually drawn" check.
+static int distinctColours(const Framebuffer& fb) {
+    std::set<uint32_t> seen;
+    for (int y = 0; y < fb.height(); y += 3)
+        for (int x = 0; x < fb.width(); x += 3) {
+            const Color c = fb.getPixel(x, y);
+            seen.insert((uint32_t)c.r << 16 | (uint32_t)c.g << 8 | c.b);
+        }
+    return (int)seen.size();
+}
+
+static void testCoverageExtras() {
+    // Level files saved with Windows line endings parse the same.
+    Level crlf;
+    CHECK(parseLevel("name PRIMER\r\nwidth 5000\r\nbg_color 0x10164a\r\nSPIKE 400 450\r\n", crlf));
+    CHECK(crlf.name == "PRIMER" && crlf.width == 5000 && crlf.obstacles.size() == 1 && crlf.bg.g == 0x16);
+    // Input::merge keeps edges (OR) and takes the newest held state and pointer.
+    Input a, b;
+    a.jumpPressed = true;
+    b.jumpHeld = true;
+    b.clicked = true;
+    b.pointerX = 40;
+    b.pointerY = 50;
+    a.merge(b);
+    CHECK(a.jumpPressed && a.jumpHeld && a.clicked && a.pointerX == 40 && a.pointerY == 50);
+    a.clearEdges();
+    CHECK(!a.jumpPressed && !a.clicked && a.jumpHeld);
+    // scaleAbout keeps its pivot fixed and scales distances from it.
+    const Mat3 sa = Mat3::scaleAbout(Vec2(10, 10), 2, 3);
+    CHECK(near(sa * Vec2(10, 10), Vec2(10, 10)) && near(sa * Vec2(11, 11), Vec2(12, 13)));
+    // A singular matrix inverts to identity instead of producing NaNs.
+    CHECK(near(Mat3::scale(0, 1).inverse() * Vec2(3, 4), Vec2(3, 4)));
+
+    // Render smoke test: every screen draws a full, varied frame.
+    std::vector<Level> levels(1);
+    CHECK(loadLevel(std::string(PULSERUN_SOURCE_DIR) + "/levels/level1.txt", levels[0]));
+    Game g(levels, false);
+    Framebuffer fb(Game::W, Game::H);
+    for (Screen s : {Screen::Menu, Screen::LevelSelect, Screen::Settings}) {
+        g.showScreen(s);
+        g.update(1.0f / 60, Input{});
+        fb.clear(rgb(0, 0, 0));
+        g.render(fb, 0.5f);
+        CHECK(distinctColours(fb) > 40 && fb.getPixel(5, 5).r + fb.getPixel(5, 5).g + fb.getPixel(5, 5).b > 0);
+    }
+    g.startLevel(0);
+    for (int i = 0; i < 30; ++i) g.update(1.0f / 60, Input{});
+    fb.clear(rgb(0, 0, 0));
+    g.render(fb, 0.5f);
+    CHECK(distinctColours(fb) > 40);
+    // The hitbox overlay draws the player's hull in its own green.
+    World w(&levels[0]);
+    Camera cam;
+    cam.reset(w.player.pos, levels[0].groundY);
+    Framebuffer hb(Game::W, Game::H);
+    hb.clear(rgb(0, 0, 0));
+    drawHitboxes(hb, w, cam.world_to_screen());
+    const Vec2 corner = cam.toScreen(Vec2(w.player.pos.x - Player::SIZE / 2 + 2, w.player.pos.y));
+    CHECK(hb.getPixel((int)std::lround(corner.x), (int)corner.y).g == 255);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -665,6 +727,7 @@ int main() {
     testAnimation();
     testProgressAndButtons();
     testGameFlow();
+    testCoverageExtras();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
