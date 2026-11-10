@@ -1,5 +1,6 @@
 // Numeric checks for the graphics algorithms. No test framework needed:
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
+#include "math/mat3.h"
 #include "raster/circle.h"
 #include "raster/clip.h"
 #include "raster/curve.h"
@@ -138,12 +139,58 @@ static void testCurves() {
     CHECK(std::abs(s[20].x - 100) < 1e-3 && std::abs(s[20].y - 10) < 1e-3);
 }
 
+static bool near(Vec2 a, Vec2 b, float eps = 1e-4f) { return std::fabs(a.x - b.x) < eps && std::fabs(a.y - b.y) < eps; }
+
+static void testMat3() {
+    // Identity leaves points unchanged.
+    CHECK(near(Mat3::identity() * Vec2(3.5f, -7), Vec2(3.5f, -7)));
+    // Translation moves the origin.
+    CHECK(near(Mat3::translate(5, -3) * Vec2(0, 0), Vec2(5, -3)));
+    // Quarter turn maps +x to +y (clockwise on a y-down screen).
+    CHECK(near(Mat3::rotate(kPi / 2) * Vec2(1, 0), Vec2(0, 1)));
+    // Scale is per axis.
+    CHECK(near(Mat3::scale(2, 3) * Vec2(4, 5), Vec2(8, 15)));
+    // Chained T*R*S applies scale, then rotate, then translate: (1,0) -> (2,0) -> (0,2) -> (10,22).
+    const Mat3 trs = Mat3::translate(10, 20) * Mat3::rotate(kPi / 2) * Mat3::scale(2, 2);
+    CHECK(near(trs * Vec2(1, 0), Vec2(10, 22)));
+    // Order matters: S*R*T is a different transform.
+    CHECK(!near(Mat3::scale(2, 2) * Mat3::rotate(kPi / 2) * Mat3::translate(10, 20) * Vec2(1, 0), Vec2(10, 22)));
+    // m * m.inverse() is the identity, and inverse undoes the transform.
+    const Mat3 m = Mat3::translate(-40, 13) * Mat3::rotate(0.7f) * Mat3::scale(1.5f, 0.5f);
+    const Mat3 id = m * m.inverse();
+    bool isId = true;
+    for (int r = 0; r < 3; ++r)
+        for (int c = 0; c < 3; ++c)
+            if (std::fabs(id.at(r, c) - (r == c ? 1.0f : 0.0f)) > 1e-5f) isId = false;
+    CHECK(isId);
+    CHECK(near(m.inverse() * (m * Vec2(123, -45)), Vec2(123, -45), 1e-3f));
+    CHECK(std::fabs(Mat3::scale(2, 3).determinant() - 6) < 1e-6f);
+    // Directions ignore translation.
+    CHECK(near(Mat3::translate(100, 100).applyVector(Vec2(1, 2)), Vec2(1, 2)));
+    // Rotating about a pivot keeps the pivot fixed.
+    CHECK(near(Mat3::rotateAbout(Vec2(50, 50), 1.1f) * Vec2(50, 50), Vec2(50, 50)));
+    // Sprite vertex: the cube's top-left corner (size 56 at (200,300)) rotated 90 degrees about
+    // its centre lands at the top-right corner, by hand: (172,272) -> (228,272).
+    CHECK(near(Mat3::rotateAbout(Vec2(200, 300), kPi / 2) * Vec2(172, 272), Vec2(228, 272), 1e-3f));
+    // Mat3 reproduces transformPolygon(): scale+rotate about pivot, then translate.
+    const Polygon spike = {Vec2(0, 0), Vec2(24, -48), Vec2(48, 0)};
+    const Vec2 pivot(24, -16), offs(300, 440);
+    const Mat3 xf = Mat3::translate(offs.x, offs.y) * Mat3::translate(pivot.x, pivot.y) * Mat3::rotate(0.4f) *
+                    Mat3::scale(1.25f, 1.25f) * Mat3::translate(-pivot.x, -pivot.y);
+    const Polygon ref = transformPolygon(spike, pivot, 0.4f, 1.25f, offs);
+    bool same = true;
+    for (size_t i = 0; i < spike.size(); ++i)
+        if (!near(xf * spike[i], ref[i], 1e-3f)) same = false;
+    CHECK(same);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
     testPolygon();
     testClipping();
     testCurves();
+    testMat3();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
