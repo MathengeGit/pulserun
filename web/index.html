@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PulseRun</title>
+<meta name="description" content="PulseRun: a neon obstacle runner whose every pixel is rasterised by hand-written C++ (Bresenham, midpoint circles, scanline fill, clipping, Bezier) and compiled to WebAssembly.">
+<meta name="color-scheme" content="dark light">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 8 8'%3E%3Crect width='8' height='8' fill='%230a0b24'/%3E%3Crect x='1' y='1' width='6' height='6' fill='%2356ff62'/%3E%3Crect x='2' y='3' width='1' height='1' fill='%230a0b24'/%3E%3Crect x='5' y='3' width='1' height='1' fill='%230a0b24'/%3E%3Crect x='2' y='5' width='4' height='1' fill='%230a0b24'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fragment+Mono&family=Schibsted+Grotesk:wght@400;500;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="site.css">
+</head>
+<body>
+<a class="skip" href="#play">Skip to the game</a>
+
+<header class="bar">
+  <a class="brand" href="#top" aria-label="PulseRun home"><span class="px" data-px="PULSE" data-tone="neon"></span><span class="px" data-px="RUN" data-tone="neon2"></span></a>
+  <nav aria-label="Sections">
+    <a href="#play">Play</a>
+    <a href="#pipeline">Pipeline</a>
+    <a href="#plates">Plates</a>
+    <a href="#build">Build</a>
+  </nav>
+  <button class="key help-key" type="button" data-help-open aria-haspopup="dialog" aria-controls="help">
+    <kbd>?</kbd><span>Help</span>
+  </button>
+</header>
+
+<main id="top">
+  <section class="hero" aria-labelledby="hero-title">
+    <div class="hero-copy">
+      <p class="eyebrow mono">Strathmore University · Computer Graphics · 2026</p>
+      <h1 id="hero-title" class="px-head" data-px="EVERY PIXEL,|HAND-ROLLED.">Every pixel, hand-rolled.</h1>
+      <p class="lede">PulseRun is a neon obstacle runner with no graphics library underneath. Lines, circles, polygons,
+        clipping and curves are rasterised by our own C++ into a plain array of pixels, compiled to WebAssembly, and copied
+        onto the canvas below once per frame.</p>
+      <p class="hero-actions">
+        <a class="btn primary" href="#play">Play the live build</a>
+        <a class="btn" id="repo-link" href="https://github.com/MathengeGit/pulserun">Source on GitHub</a>
+      </p>
+    </div>
+  </section>
+
+  <section id="play" class="cabinet-wrap" aria-labelledby="play-title">
+    <h2 id="play-title" class="sr-only">Play PulseRun</h2>
+    <figure class="cabinet">
+      <div class="strip strip-top mono" aria-live="polite">
+        <span class="lamp" data-state="boot" id="lamp" aria-hidden="true"></span>
+        <span id="status">Loading the WebAssembly build…</span>
+        <span class="strip-gap"></span>
+        <span id="build-stamp" class="dim">build —</span>
+      </div>
+      <div class="screen" id="screen">
+        <canvas id="canvas" width="960" height="540" tabindex="0" aria-label="PulseRun game. Space or click to jump, Escape to pause."></canvas>
+        <div class="boot" id="boot" aria-hidden="true">
+          <div class="boot-lines"></div>
+          <p class="mono">RASTERISING FRAME 0</p>
+        </div>
+        <div class="fault" id="fault" hidden>
+          <p class="px-head small" data-px="NO SIGNAL">No signal</p>
+          <p>The WebAssembly build did not load. Try a refresh, or <a href="#plates">browse the plates</a>.</p>
+        </div>
+      </div>
+      <div class="strip strip-bottom">
+        <span class="cap"><kbd>Space</kbd><kbd>Click</kbd> jump · hold for higher</span>
+        <span class="cap"><kbd>Esc</kbd> pause</span>
+        <span class="cap"><kbd>R</kbd> restart</span>
+        <span class="cap"><kbd>H</kbd> hitboxes</span>
+      </div>
+      <figcaption><span class="fig mono">Fig. 0</span> The live build of <code>main</code>. A 960 × 540 framebuffer, drawn
+        by the same C++ that renders the PNG evidence, scaled here by your browser. Physics runs at a fixed 60 Hz.</figcaption>
+    </figure>
+    <aside class="invite" id="invite" hidden aria-labelledby="invite-title">
+      <p id="invite-title"><strong>First run?</strong> Click the game, then press <kbd>Space</kbd> to jump. Hold it to jump higher.
+        Press <kbd>?</kbd> any time for controls and a glossary.</p>
+      <div class="invite-actions">
+        <button class="btn primary small" type="button" data-invite-go>Start playing</button>
+        <button class="btn small" type="button" data-invite-close>Not now</button>
+      </div>
+    </aside>
+  </section>
+
+  <section id="pipeline" class="section" aria-labelledby="pipe-title">
+    <header class="section-head">
+      <span class="num mono">01</span>
+      <h2 id="pipe-title" class="px-head" data-px="THE PIPELINE">The pipeline</h2>
+      <p>One frame, start to finish. Nothing on the right of an arrow knows anything about graphics hardware.</p>
+    </header>
+    <ol class="pipe">
+      <li><span class="mono step">level1.txt</span><h3>Level file</h3><p>Plain text: <code>SPIKE 400 450</code>. Parsed into obstacles with hitbox polygons.</p></li>
+      <li><span class="mono step">60 Hz</span><h3>Physics</h3><p>Fixed timestep. Gravity, hold-to-jump, AABB broad phase, polygon narrow phase.</p></li>
+      <li><span class="mono step">mat3</span><h3>Camera</h3><p>A 3 × 3 homogeneous matrix maps world to screen before anything is drawn.</p></li>
+      <li><span class="mono step">raster/</span><h3>Rasterise</h3><p>Bresenham, midpoint circles, edge-table scanline fill, Cohen-Sutherland, De Casteljau.</p></li>
+      <li><span class="mono step">960 × 540</span><h3>Framebuffer</h3><p>518 400 RGBA pixels with source-over alpha blending, nothing more.</p></li>
+      <li><span class="mono step">putImageData</span><h3>Present</h3><p>The bytes are copied to this canvas (or an SDL window on desktop) untouched.</p></li>
+    </ol>
+  </section>
+
+  <section id="plates" class="section" aria-labelledby="plates-title">
+    <header class="section-head">
+      <span class="num mono">02</span>
+      <h2 id="plates-title" class="px-head" data-px="PLATES">Plates</h2>
+      <p>Rendered by CI from this exact commit. Hover or drag across any plate to inspect real pixels under the loupe.</p>
+    </header>
+    <div class="plates" id="plate-grid"></div>
+    <p class="empty" id="plates-empty" hidden>No plates in this build. They are rendered by the CI pipeline.</p>
+  </section>
+
+  <section id="build" class="section" aria-labelledby="build-title">
+    <header class="section-head">
+      <span class="num mono">03</span>
+      <h2 id="build-title" class="px-head" data-px="BUILD SHEET">Build sheet</h2>
+      <p>Every push to <code>main</code> is built, tested and redeployed here automatically.</p>
+    </header>
+    <dl class="sheet mono" id="sheet">
+      <div><dt>Commit</dt><dd id="b-commit">—</dd></div>
+      <div><dt>Message</dt><dd id="b-subject">—</dd></div>
+      <div><dt>Checks</dt><dd id="b-tests">—</dd></div>
+      <div><dt>Built</dt><dd id="b-built">—</dd></div>
+      <div><dt>Pipeline</dt><dd id="b-run">—</dd></div>
+    </dl>
+  </section>
+</main>
+
+<footer class="foot">
+  <p class="mono">PulseRun · Wachira Njoroge · Mathenge Gitahi · Stacy Akinyi · Marie Hoppe Solini · Diana Mucheke · Anise Wambui Kimani</p>
+  <p class="dim">C++17, no graphics library. Fonts: Schibsted Grotesk, Fragment Mono, and the game's own 5 × 7 bitmap face.</p>
+</footer>
+
+<div class="loupe" id="loupe" hidden aria-hidden="true">
+  <canvas width="168" height="168"></canvas>
+  <p class="mono" id="loupe-read"></p>
+</div>
+
+<div class="drawer-veil" id="help-veil" hidden></div>
+<aside class="drawer" id="help" role="dialog" aria-modal="true" aria-labelledby="help-title" hidden tabindex="-1">
+  <header>
+    <h2 id="help-title" class="px-head small" data-px="HELP">Help</h2>
+    <button class="key close" type="button" data-help-close aria-label="Close help"><kbd>Esc</kbd></button>
+  </header>
+  <h3>Controls</h3>
+  <table class="keys">
+    <tr><td><kbd>Space</kbd> <kbd>↑</kbd> <kbd>Click</kbd> <kbd>Tap</kbd></td><td>Jump. Hold for a higher jump (up to 350 ms). Hold on landing to keep jumping.</td></tr>
+    <tr><td><kbd>Esc</kbd> <kbd>P</kbd></td><td>Pause, or back out of a menu</td></tr>
+    <tr><td><kbd>R</kbd></td><td>Restart the level</td></tr>
+    <tr><td><kbd>H</kbd></td><td>Show the collision polygons the physics uses</td></tr>
+    <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>Enter</kbd></td><td>Move between buttons and choose</td></tr>
+    <tr><td><kbd>?</kbd></td><td>Open or close this panel</td></tr>
+  </table>
+  <h3>How a frame is made</h3>
+  <ol class="mini-pipe">
+    <li>The fixed-timestep loop advances physics in 1/60 s steps.</li>
+    <li>The camera's <code>mat3</code> turns world positions into screen positions.</li>
+    <li>Each shape is rasterised into the framebuffer by our own algorithms.</li>
+    <li>The finished pixels are copied to the canvas.</li>
+  </ol>
+  <h3>Glossary</h3>
+  <dl class="gloss">
+    <dt>Bresenham</dt><dd>Integer-only line drawing: steps one pixel at a time and tracks the error term.</dd>
+    <dt>Midpoint circle</dt><dd>Plots one octant of a circle by testing the midpoint between two candidate pixels, then mirrors it eight ways.</dd>
+    <dt>Scanline fill</dt><dd>Fills a polygon row by row using an edge table and an active edge table (even-odd rule).</dd>
+    <dt>Cohen-Sutherland</dt><dd>Clips a line to a rectangle using 4-bit outcodes to accept or reject quickly.</dd>
+    <dt>Sutherland-Hodgman</dt><dd>Clips a polygon against each window edge in turn.</dd>
+    <dt>De Casteljau</dt><dd>Evaluates a Bezier curve by repeated linear interpolation.</dd>
+    <dt>mat3</dt><dd>A 3 × 3 matrix on (x, y, 1) so translate, rotate and scale chain by multiplication.</dd>
+    <dt>AABB</dt><dd>Axis-aligned bounding box: the cheap first test before exact polygon overlap.</dd>
+    <dt>Fixed timestep</dt><dd>Physics always advances by exactly 1/60 s, so jumps are identical on every machine.</dd>
+  </dl>
+</aside>
+
+<script>
+  // Emscripten looks for this before pulserun.js loads.
+  var Module = {
+    canvas: document.getElementById('canvas'),
+    prKeysActive: true,
+    onRuntimeInitialized: function () { window.dispatchEvent(new Event('pulserun-ready')); },
+    printErr: function (t) { console.warn(t); }
+  };
+</script>
+<script src="site.js"></script>
+<script async src="game/pulserun.js" onerror="window.dispatchEvent(new Event('pulserun-fault'))"></script>
+</body>
+</html>

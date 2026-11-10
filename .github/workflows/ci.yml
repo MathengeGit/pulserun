@@ -1,0 +1,180 @@
+# Build, test and deploy PulseRun.
+#
+#   native  - headless Linux build, the algorithm tests, and freshly rendered screenshots
+#   web     - the game compiled to WebAssembly with Emscripten
+#   site    - assembles web/ + the wasm game + screenshots + build.json into one static site
+#   deploy  - publishes the site to GitHub Pages (push to main, schedule, or manual run)
+#
+# The same file runs in the team repo and in a personal fork. In a fork it always builds
+# the team repo's main branch, and the 20-minute schedule redeploys whenever that branch
+# has moved, so the fork's Pages site tracks the team's work even when nobody pushes to it.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+  schedule:
+    - cron: "*/20 * * * *"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+env:
+  UPSTREAM: MathengeGit/pulserun
+
+jobs:
+  gate:
+    runs-on: ubuntu-latest
+    outputs:
+      repo: ${{ steps.src.outputs.repo }}
+      ref: ${{ steps.src.outputs.ref }}
+      run: ${{ steps.src.outputs.run }}
+    steps:
+      - id: src
+        shell: bash
+        run: |
+          if [ "$GITHUB_REPOSITORY" != "$UPSTREAM" ] && [ "$GITHUB_EVENT_NAME" != "pull_request" ]; then
+            repo="$UPSTREAM"; ref="main"
+          else
+            repo="$GITHUB_REPOSITORY"; ref="$GITHUB_SHA"
+          fi
+          run=true
+          if [ "$GITHUB_EVENT_NAME" = "schedule" ]; then
+            if [ "$GITHUB_REPOSITORY" = "$UPSTREAM" ]; then
+              run=false   # the team repo deploys on push; the schedule is for forks
+            else
+              head=$(git ls-remote "https://github.com/$UPSTREAM" refs/heads/main | cut -f1)
+              owner=$(echo "${GITHUB_REPOSITORY%%/*}" | tr '[:upper:]' '[:lower:]')
+              live=$(curl -fsSL "https://$owner.github.io/${GITHUB_REPOSITORY##*/}/build.json" 2>/dev/null \
+                     | python3 -c 'import sys,json; print(json.load(sys.stdin).get("sha",""))' 2>/dev/null || true)
+              echo "upstream main: $head, live: $live"
+              [ -n "$head" ] && [ "$head" = "$live" ] && run=false
+            fi
+          fi
+          echo "repo=$repo" >> "$GITHUB_OUTPUT"
+          echo "ref=$ref" >> "$GITHUB_OUTPUT"
+          echo "run=$run" >> "$GITHUB_OUTPUT"
+
+  native:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.gate.outputs.repo }}
+          ref: ${{ needs.gate.outputs.ref }}
+      - name: Install tools
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq ninja-build webp
+      - name: Configure (headless)
+        run: cmake -S . -B build -G Ninja -DPULSERUN_HEADLESS=ON
+      - name: Build
+        run: cmake --build build
+      - name: Test
+        run: ./build/test_algorithms | tee test-results.txt
+      - name: Render screenshots
+        run: |
+          cmake --build build --target screenshots
+          if [ -x build/pulserun ] && ./build/pulserun --help 2>/dev/null | grep -q showcase; then
+            ./build/pulserun --showcase docs/screenshots
+          fi
+      - name: Prepare site assets
+        run: |
+          mkdir -p out/shots
+          for f in docs/screenshots/*.png; do cwebp -quiet -q 88 "$f" -o "out/shots/$(basename "${f%.png}").webp"; done
+          python3 web/export_font.py src/raster/font.cpp out/font.json
+          cp test-results.txt out/
+          git log -1 --format='%H%n%h%n%cI%n%an%n%s' > out/commit.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: native
+          path: out
+
+  web:
+    needs: gate
+    if: needs.gate.outputs.run == 'true'
+    runs-on: ubuntu-latest
+    container: emscripten/emsdk:3.1.64
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.gate.outputs.repo }}
+          ref: ${{ needs.gate.outputs.ref }}
+      - name: Build WebAssembly
+        run: |
+          emcmake cmake -S . -B build-web -DCMAKE_BUILD_TYPE=Release
+          cmake --build build-web --target pulserun -j4
+          mkdir -p out && cp build-web/pulserun.js build-web/pulserun.wasm out/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: web
+          path: out
+
+  site:
+    needs: [gate, native, web]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ needs.gate.outputs.repo }}
+          ref: ${{ needs.gate.outputs.ref }}
+      - uses: actions/download-artifact@v4
+        with: { name: native, path: native }
+      - uses: actions/download-artifact@v4
+        with: { name: web, path: webbuild }
+      - name: Assemble
+        shell: bash
+        run: |
+          mkdir -p _site/game
+          cp -r web/. _site/
+          rm -f _site/export_font.py
+          cp webbuild/pulserun.js webbuild/pulserun.wasm _site/game/
+          cp -r native/shots _site/shots
+          cp native/font.json _site/font.json
+          mapfile -t c < native/commit.txt
+          tests=$(grep -o '[0-9]*/[0-9]* checks passed' native/test-results.txt || echo "unknown")
+          python3 - "$tests" "${c[@]}" <<'PY'
+          import json, sys, datetime, os
+          tests, sha, short, date, author, subject = sys.argv[1:7]
+          shots = sorted(os.listdir("_site/shots"))
+          json.dump({
+              "sha": sha, "short": short, "committed": date, "author": author, "subject": subject,
+              "tests": tests, "built": datetime.datetime.utcnow().replace(microsecond=0).isoformat() + "Z",
+              "source": os.environ["SRC_REPO"], "run": os.environ["RUN_URL"], "shots": shots,
+          }, open("_site/build.json", "w"), indent=2)
+          PY
+          cat _site/build.json
+        env:
+          SRC_REPO: ${{ needs.gate.outputs.repo }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: site
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      # Pages must be switched on once by a repo admin (Settings -> Pages -> Source: GitHub Actions).
+      # Until then this step fails softly and the run stays green.
+      - id: pages
+        uses: actions/configure-pages@v5
+        continue-on-error: true
+      - id: deployment
+        if: steps.pages.outcome == 'success'
+        uses: actions/deploy-pages@v4
+      - if: steps.pages.outcome != 'success'
+        run: echo "::notice::GitHub Pages is not enabled for this repository yet; skipped deploy."

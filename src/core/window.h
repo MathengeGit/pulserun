@@ -25,8 +25,9 @@ public:
 
     static bool is_headless();
 
+    struct Impl;  // backend state; public so backend callbacks can name it
+
 private:
-    struct Impl;
     Impl* impl_ = nullptr;
     Input input_;
 };
