@@ -1,0 +1,120 @@
+# PulseRun Level 3 - ADVANCED
+# Fastest of the three: tight timing, quad spikes, saws above platforms, orb-to-pad links.
+name ADVANCED
+number 3
+difficulty 2
+width 14000
+ground_y 500
+speed 520
+bg_color 0x2a0f3e
+
+# --- Opening ------------------------------------------------------------------
+SPIKE 600  450
+SPIKE 650  450
+SPIKE 700  450
+SPIKE 1100 450
+SPIKE 1150 450
+SPIKE 1200 450
+SPIKE 1250 450
+
+# --- Block run with spikes between -----------------------------------------------
+BLOCK 1600 440 120 60
+SPIKE 1720 450
+SPIKE 1770 450
+BLOCK 1820 440 120 60
+SPIKE 1940 450
+SPIKE 1990 450
+BLOCK 2040 380 120 120
+SAW   2100 300 radius=24 speed=1.8
+
+# --- Orb pit, then an immediate pad --------------------------------------------
+SPIKE 2400 450
+SPIKE 2450 450
+SPIKE 2500 450
+SPIKE 2550 450
+SPIKE 2600 450
+SPIKE 2650 450
+SPIKE 2700 450
+SPIKE 2750 450
+SPIKE 2800 450
+ORB   2600 340
+PAD   3050 488
+BLOCK 3300 240 60 260
+
+# --- Tunnel: tap to hop the floor spikes; a held jump hits the ceiling ----------
+BLOCK 3800 250 700 40
+SPIKE 3950 450
+SPIKE 4250 450
+
+# --- Saw gauntlet ---------------------------------------------------------------
+SAW   4800 470 radius=34 speed=2
+SAW   5150 400 radius=24 speed=1.2
+SAW   5500 470 radius=34 speed=2
+SPIKE 5850 450
+SPIKE 5900 450
+SPIKE 5950 450
+
+# --- Rising platforms -------------------------------------------------------------
+BLOCK 6300 440 120 60
+BLOCK 6600 380 120 120
+BLOCK 6900 320 120 180
+BLOCK 7200 260 120 240
+SPIKE 6420 450
+SPIKE 6470 450
+SPIKE 6520 450
+SPIKE 6720 450
+SPIKE 6770 450
+SPIKE 6820 450
+SPIKE 7020 450
+SPIKE 7070 450
+SPIKE 7120 450
+SPIKE 7320 450
+SPIKE 7370 450
+SPIKE 7420 450
+SPIKE 7470 450
+
+# --- Double orb ---------------------------------------------------------------
+SPIKE 7900 450
+SPIKE 7950 450
+SPIKE 8000 450
+SPIKE 8050 450
+SPIKE 8100 450
+SPIKE 8150 450
+SPIKE 8200 450
+SPIKE 8250 450
+SPIKE 8300 450
+SPIKE 8350 450
+SPIKE 8400 450
+SPIKE 8450 450
+ORB   8080 340
+ORB   8400 320
+
+# --- Pad into a saw-guarded landing ------------------------------------------------
+PAD   8900 488
+BLOCK 9150 340 360 60
+SAW   9330 300 radius=22 speed=2
+SPIKE 9600 450
+SPIKE 9650 450
+SPIKE 9700 450
+
+# --- Fast singles ------------------------------------------------------------------
+SPIKE 10100 450
+SPIKE 10450 450
+SPIKE 10500 450
+SPIKE 10850 450
+SPIKE 11200 450
+SPIKE 11250 450
+SPIKE 11300 450
+SAW   11700 470 radius=34 speed=2.4
+
+# --- Last climb: wide steps at full speed -------------------------------------------
+BLOCK 12100 440 120 60
+BLOCK 12220 380 120 120
+BLOCK 12340 320 120 180
+BLOCK 12460 260 160 240
+SPIKE 12850 450
+SPIKE 12900 450
+SPIKE 12950 450
+SPIKE 13000 450
+SPIKE 13350 450
+PORTAL 13700 440
