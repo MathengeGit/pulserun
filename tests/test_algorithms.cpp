@@ -3,6 +3,7 @@
 #include "game/animation.h"
 #include "game/camera.h"
 #include "game/collision.h"
+#include "game/game.h"
 #include "game/game_loop.h"
 #include "game/level.h"
 #include "game/player.h"
@@ -564,6 +565,89 @@ static void testAnimation() {
     CHECK(fx.empty());
 }
 
+static void testProgressAndButtons() {
+    Progress p;
+    CHECK(p.recordDeath(2, 0.4f) && !p.recordDeath(2, 0.3f) && p.at(2).attempts == 2);
+    CHECK(p.recordComplete(1, 25.0f) && p.recordComplete(1, 22.5f) && !p.recordComplete(1, 30.0f));
+    p.hitboxes = true;
+    const Progress q = Progress::parse(p.serialize());
+    CHECK(q.levels.size() == 2 && q.hitboxes && std::fabs(q.levels[1].best - 0.4f) < 1e-3f);
+    CHECK(q.levels[0].completed && std::fabs(q.levels[0].bestTime - 22.5f) < 1e-2f && q.levels[0].attempts == 3);
+    CHECK(Progress::parse("garbage\nlevel x y\n").levels.empty());
+    // Button helpers: hit testing skips disabled buttons; focus wraps and skips them too.
+    std::vector<Button> bs = stackButtons({"A", "B", "C"}, 100, 10, 80, 20, 5, rgb(0, 0, 0));
+    CHECK(buttonAt(bs, 100, 40) == 1 && buttonAt(bs, 5, 5) == -1);
+    bs[1].enabled = false;
+    CHECK(buttonAt(bs, 100, 40) == -1 && moveFocus(bs, 0, 1) == 2 && moveFocus(bs, 2, 1) == 0);
+}
+
+static void testGameFlow() {
+    std::vector<Level> levels;
+    for (int n = 1; n <= 3; ++n) {
+        Level l;
+        CHECK(loadLevel(std::string(PULSERUN_SOURCE_DIR) + "/levels/level" + std::to_string(n) + ".txt", l));
+        levels.push_back(l);
+    }
+    Game g(levels, false);
+    const float dt = 1.0f / 60;
+    auto key = [](bool Input::*k) { Input in; in.*k = true; return in; };
+    CHECK(g.screen() == Screen::Menu && g.focus() == 1);  // PLAY focused
+    // Menu -> level select with the arrow keys, Esc back.
+    g.update(dt, key(&Input::leftPressed));
+    g.update(dt, key(&Input::enterPressed));
+    CHECK(g.screen() == Screen::LevelSelect);
+    g.update(dt, key(&Input::escPressed));
+    CHECK(g.screen() == Screen::Menu);
+    // Space on PLAY starts level 1; the press that started it does not make the cube jump.
+    Input space;
+    space.jumpPressed = space.jumpHeld = true;
+    g.update(dt, key(&Input::rightPressed));
+    g.update(dt, key(&Input::leftPressed));
+    g.update(dt, space);
+    CHECK(g.screen() == Screen::Playing && g.attempt() == 1);
+    Input hold;
+    hold.jumpHeld = true;
+    for (int i = 0; i < 10; ++i) g.update(dt, hold);
+    CHECK(g.world().player.on_ground);
+    // Esc pauses (the world stops), Esc resumes.
+    g.update(dt, key(&Input::escPressed));
+    CHECK(g.screen() == Screen::Paused);
+    const float x = g.world().player.pos.x;
+    for (int i = 0; i < 30; ++i) g.update(dt, Input{});
+    CHECK(g.world().player.pos.x == x);
+    g.update(dt, key(&Input::escPressed));
+    CHECK(g.screen() == Screen::Playing);
+    // Losing focus pauses too.
+    g.update(dt, key(&Input::focusLost));
+    CHECK(g.screen() == Screen::Paused);
+    g.update(dt, key(&Input::escPressed));
+    // Idle into the first spike: death animation, then the crashed screen; retry counts an attempt.
+    for (int i = 0; i < 600 && g.screen() == Screen::Playing; ++i) g.update(dt, Input{});
+    CHECK(g.screen() == Screen::Dying);
+    for (int i = 0; i < 120 && g.screen() == Screen::Dying; ++i) g.update(dt, Input{});
+    CHECK(g.screen() == Screen::Dead && g.progress().levels[0].attempts == 1 && g.progress().levels[0].best > 0);
+    for (int i = 0; i < 20; ++i) g.update(dt, Input{});
+    g.update(dt, key(&Input::enterPressed));  // RETRY is focused
+    CHECK(g.screen() == Screen::Playing && g.attempt() == 2);
+    // A solved run reaches LEVEL COMPLETE with a best time, and NEXT LEVEL loads level 2.
+    const SolveResult plan = solveLevel(levels[0]);
+    g.startLevel(0);
+    bool prev = false;
+    for (uint8_t h : plan.held) {
+        if (g.screen() != Screen::Playing) break;
+        Input in;
+        in.jumpHeld = h != 0;
+        in.jumpPressed = in.jumpHeld && !prev;
+        prev = in.jumpHeld;
+        g.update(dt, in);
+    }
+    for (int i = 0; i < 300 && g.screen() == Screen::Playing; ++i) g.update(dt, Input{});
+    CHECK(g.screen() == Screen::Complete && g.progress().levels[0].completed && g.progress().levels[0].bestTime > 10);
+    for (int i = 0; i < 30; ++i) g.update(dt, Input{});
+    g.update(dt, key(&Input::enterPressed));
+    CHECK(g.screen() == Screen::Playing && g.world().level->number == 2);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -579,6 +663,8 @@ int main() {
     testWorld();
     testShippedLevels();
     testAnimation();
+    testProgressAndButtons();
+    testGameFlow();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
