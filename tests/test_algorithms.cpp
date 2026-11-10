@@ -1,5 +1,6 @@
 // Numeric checks for the graphics algorithms. No test framework needed:
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
+#include "game/game_loop.h"
 #include "math/mat3.h"
 #include "raster/circle.h"
 #include "raster/clip.h"
@@ -184,6 +185,44 @@ static void testMat3() {
     CHECK(same);
 }
 
+namespace {
+struct CountingState : GameState {
+    int updates = 0, jumpEdges = 0;
+    float lastDt = 0;
+    void update(float dt, const Input& in) override {
+        ++updates;
+        lastDt = dt;
+        if (in.jumpPressed) ++jumpEdges;
+    }
+    void render(Framebuffer&, float) override {}
+};
+}  // namespace
+
+static void testGameLoop() {
+    GameLoop loop(8, 8);
+    CountingState s;
+    // 50 ms of wall time = 3 whole 60 Hz steps, with the remainder carried as alpha.
+    CHECK(loop.advance(0.050, s, Input{}) == 3);
+    CHECK(std::fabs(s.lastDt - 1.0f / 60.0f) < 1e-7f);
+    CHECK(loop.alpha() > 0.0f && loop.alpha() < 1.0f);
+    // A jump edge that lands between steps is held until the next step, then seen once.
+    Input in;
+    in.jumpPressed = true;
+    CHECK(loop.advance(0.001, s, in) == 0);
+    CHECK(s.jumpEdges == 0);
+    loop.advance(0.040, s, Input{});
+    CHECK(s.jumpEdges == 1);
+    // A long stall is clamped to MAX_FRAME (no spiral of death): at most 15 steps.
+    GameLoop l2(8, 8);
+    CountingState s2;
+    CHECK(l2.advance(10.0, s2, Input{}) == (int)(GameLoop::MAX_FRAME / GameLoop::FIXED_DT + 1e-6));
+    // Splitting the same wall time into odd frame lengths gives the same step count.
+    GameLoop l3(8, 8);
+    CountingState s3;
+    for (int i = 0; i < 70; ++i) l3.advance(i % 2 ? 0.007 : 0.0213, s3, Input{});
+    CHECK(s3.updates == (int)((35 * 0.007 + 35 * 0.0213) * 60));
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -191,6 +230,7 @@ int main() {
     testClipping();
     testCurves();
     testMat3();
+    testGameLoop();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

@@ -23,4 +23,25 @@ struct Input {
         upPressed = downPressed = leftPressed = rightPressed = false;
         restartPressed = hitboxPressed = focusLost = clicked = false;
     }
+
+    // Take the newest held state and pointer from `src`, and OR in its edges, so an edge
+    // that arrives between two fixed updates is kept until an update consumes it.
+    void merge(const Input& src) {
+        jumpHeld = src.jumpHeld;
+        jumpPressed |= src.jumpPressed;
+        escPressed |= src.escPressed;
+        enterPressed |= src.enterPressed;
+        upPressed |= src.upPressed;
+        downPressed |= src.downPressed;
+        leftPressed |= src.leftPressed;
+        rightPressed |= src.rightPressed;
+        restartPressed |= src.restartPressed;
+        hitboxPressed |= src.hitboxPressed;
+        focusLost |= src.focusLost;
+        if (src.clicked) clicked = true;
+        if (src.pointerX >= 0) {
+            pointerX = src.pointerX;
+            pointerY = src.pointerY;
+        }
+    }
 };
