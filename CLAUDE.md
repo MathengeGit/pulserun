@@ -16,40 +16,50 @@ This is a **Computer Graphics university semester project** (Strathmore Universi
 
 ## 2. Current state — what is done
 
-**Checkpoint 1 is complete.** Do not re-implement anything already done.
+**All three milestones are complete (Checkpoints 1-4, tasks 1-13).** Do not re-implement anything already done.
+The game is playable on desktop (SDL2), in the browser (WebAssembly) and renders headlessly; 231 tests pass.
 
 | Area | Status | Location |
 |------|--------|----------|
-| Framebuffer (pixel array + BMP/PNG export) | ✅ Done | `src/core/framebuffer.cpp` |
-| DDA, Bresenham lines (all 8 octants), dashed, thick | ✅ Done | `src/raster/line.cpp` |
-| Midpoint circle, ellipse, arcs, filled variants | ✅ Done | `src/raster/circle.cpp` |
-| Polygon fill (edge table, AET, even-odd), point-in-polygon | ✅ Done | `src/raster/polygon.cpp` |
-| Cohen-Sutherland + Sutherland-Hodgman clipping | ✅ Done | `src/raster/clip.cpp` |
-| Cubic Bézier (De Casteljau), Catmull-Rom spline | ✅ Done | `src/raster/curve.cpp` |
-| Alpha blending, gradients, glow layers | ✅ Done | `src/core/` |
-| 5×7 bitmap font | ✅ Done | `src/raster/font.cpp` |
-| Game sprites: cube, spikes, blocks, saws, orbs, portals | ✅ Done | `src/game/sprites.cpp` |
-| UI: HUD, buttons, level cards, logo | ✅ Done | `src/ui/ui.cpp` |
-| Demo scenes: gameplay, main menu, level select, death | ✅ Done | `demos/` |
-| 84 automated algorithm tests | ✅ Done | `tests/` |
-| `vec2` math type | ✅ Done | `src/math/vec2.h` |
+| Checkpoint 1: framebuffer, lines, circles, polygons, clipping, curves, font, sprites, UI, demos | ✅ Done | `src/core`, `src/raster`, `src/game/sprites.cpp`, `src/ui/ui.cpp`, `demos/` |
+| `Mat3` 2D homogeneous transforms (#1) | ✅ Done | `src/math/mat3.h/.cpp` |
+| Window: SDL2 / browser canvas / headless backends + input (#5) | ✅ Done | `src/core/window*.cpp`, `src/core/input.h` |
+| Fixed-timestep game loop (#11) | ✅ Done | `src/game/game_loop.h/.cpp` |
+| Camera with Mat3 world-to-screen (#13) | ✅ Done | `src/game/camera.h` |
+| Player physics, hold-to-jump (#15) | ✅ Done | `src/game/player.h/.cpp` |
+| Collision: AABB + polygon overlap + resolution (#17) | ✅ Done | `src/game/collision.h/.cpp`, `obstacle.h` |
+| Level format + loader (#19) | ✅ Done | `src/game/level.h/.cpp` |
+| Levels 1-3, World simulation, solver that proves levels beatable (#21) | ✅ Done | `levels/`, `src/game/world*.cpp`, `solver.cpp` |
+| Animation system: death burst, pad spring, orb pop (#23) | ✅ Done | `src/game/animation.h/.cpp` |
+| Screens: menu, select, settings, pause, death, complete; saved progress (#25, #26) | ✅ Done | `src/game/game*.cpp`, `src/ui/button.*`, `progress.*`, `src/core/storage.*` |
+| Tests: 231 checks (#28) | ✅ Done | `tests/test_algorithms.cpp` |
+| CI + live web deploy (#7) | ✅ Done | `.github/workflows/ci.yml`, `web/` |
+| README (#34) | ✅ Done | `README.md` |
 
-**Output is currently offline**: demos render to PNG files. There is no window, no keyboard input, no game loop, no physics, and no level loading yet.
+**Live build:** https://diorwachira.github.io/pulserun/ (a fork that rebuilds the team's `main` every 20 minutes).
+The team repo deploys too once an admin enables **Settings -> Pages -> Source: GitHub Actions**.
+
+When you change a level, run the tests: `testShippedLevels` fails if the solver cannot finish it. When you add a
+screen, add it to `runShowcase` in `app/main.cpp` so CI publishes a screenshot of it.
+
+Section 7 below is the original task brief, kept for reference.
 
 ---
 
 ## 3. Repository layout
 
 ```
+app/           main.cpp (play, or --showcase <dir> to render every screen headlessly)
 src/
-  core/        colour, framebuffer, BMP/PNG writers
-  math/        vec2.h  ← mat3 goes here next
+  core/        colour, framebuffer, BMP/PNG writers, window backends, input, storage
+  math/        vec2.h, mat3.h/.cpp
   raster/      line, circle, polygon, clip, curve, font
-  game/        sprites (cube, spikes, saws, orbs, portals, backdrop)
+  game/        sprites, player, collision, level, world, solver, camera, loop, animation, game screens
   ui/          HUD, buttons, level cards, logo
 demos/         one .cpp per technique + four game-style scenes
-tests/         test_algorithms.cpp (84 checks)
-levels/        level1.txt (to be created)
+tests/         test_algorithms.cpp (231 checks)
+levels/        level1.txt, level2.txt, level3.txt
+web/           website around the live WebAssembly build
 docs/screenshots/  rendered PNGs used as evidence
 CMakeLists.txt
 ```
@@ -140,9 +150,9 @@ test/<short-name>        # tests only
 
 ---
 
-## 7. What to build next — ordered priority
+## 7. Original task brief (all done)
 
-Work through these in order. Each item maps to a Milestone.
+Kept for reference: the order the work was planned and built in.
 
 ### MILESTONE 1 — Checkpoint 2: Transforms, Window & Game Loop
 
