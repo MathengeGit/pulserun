@@ -161,7 +161,16 @@
     '06_scene_gameplay': ['Gameplay still', 'Every sprite built from the primitives above', 'demos/demo_scenes.cpp'],
     '07_scene_menu': ['Main menu still', 'Logo, ECG pulse line, buttons', 'src/ui/ui.cpp'],
     '08_scene_level_select': ['Level select still', 'Cards with difficulty faces and padlock', 'src/ui/ui.cpp'],
-    '09_scene_death': ['Death still', 'Shards clipped to the viewport with Sutherland-Hodgman', 'src/game/sprites.cpp']
+    '09_scene_death': ['Death still', 'Shards clipped to the viewport with Sutherland-Hodgman', 'src/game/sprites.cpp'],
+    '10_game_menu': ['Live menu', 'The Checkpoint 1 menu, now animated: the ECG line beats and the cube hops', 'src/game/game_screens.cpp'],
+    '11_game_level_select': ['Level select', 'Cards read real best scores; arrow keys lift the focused card', 'src/game/game_screens.cpp'],
+    '12_game_settings': ['Settings', 'Hitbox overlay toggle and progress reset', 'src/game/game.cpp'],
+    '13_game_play': ['Mid-run', 'The solver playing Level 1 at 43 %, with the Catmull-Rom motion trail', 'src/game/world_render.cpp'],
+    '14_game_hitboxes': ['Hitboxes', 'Dashed AABBs are the broad phase; solid hulls are the exact polygons', 'src/game/collision.cpp'],
+    '15_game_paused': ['Paused', 'Resume, restart or quit, by keyboard, mouse or touch', 'src/game/game.cpp'],
+    '16_game_death_burst': ['Death burst', 'Frame 4 of the 5-frame, 15 fps shock-wave animation', 'src/game/animation.cpp'],
+    '17_game_crashed': ['Crashed', 'Progress at death and the best so far', 'src/game/game_screens.cpp'],
+    '18_game_complete': ['Level complete', 'Attempts, time and best time', 'src/game/game_screens.cpp']
   };
   function caption(name) {
     var key = name.replace(/\.[a-z]+$/, '');
