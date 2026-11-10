@@ -1,32 +1,53 @@
 // PulseRun entry point: a 1280x720 window showing a 960x540 framebuffer, driven by
 // the fixed-timestep GameLoop. Headless builds (no SDL2) write a PNG instead.
 #include "core/window.h"
+#include "game/camera.h"
 #include "game/game_loop.h"
 #include "game/sprites.h"
 #include "ui/ui.h"
+#include <cmath>
 #include <cstdio>
 
 namespace {
-// Scrolling scene: the scroll advances in fixed steps and is interpolated for rendering.
+// Scrolling scene: obstacles live in world space and reach the screen only through the
+// camera's world-to-screen matrix.
 class DemoScene : public GameState {
 public:
+    DemoScene() {
+        cam_.reset(Vec2(0, kGround - 28), kGround);
+        prevCam_ = cam_;
+    }
     void update(float dt, const Input&) override {
-        prevScroll_ = scroll_;
-        scroll_ += 240.0f * dt;
+        prevCam_ = cam_;
+        playerX_ += 300.0f * dt;
         time_ += dt;
+        cam_.follow(Vec2(playerX_, kGround - 28), kGround, dt);
     }
     void render(Framebuffer& fb, float alpha) override {
-        const float s = prevScroll_ + (scroll_ - prevScroll_) * alpha;
-        drawBackdrop(fb, s, 440, pal_);
-        drawGround(fb, 440, s, pal_);
-        drawSaw(fb, Vec2(700, 358), 44, time_ * 4.0f, pal_);
-        drawCube(fb, Vec2(240, 412), 56, 0.0f, pal_);
+        const Camera cam = Camera::lerp(prevCam_, cam_, alpha);
+        const Mat3 view = cam.world_to_screen();
+        const float groundScreen = (view * Vec2(0, kGround)).y;
+        drawBackdrop(fb, cam.scroll_x, (int)groundScreen, pal_);
+        drawGround(fb, (int)groundScreen, cam.scroll_x, pal_);
+        // A repeating strip of world objects every 900 px.
+        const int first = (int)std::floor(cam.scroll_x / 900.0f);
+        for (int k = first; k <= first + 2; ++k) {
+            const float x = k * 900.0f;
+            const Vec2 spike = view * Vec2(x + 300, kGround);
+            drawSpike(fb, spike.x, spike.y, 50, 50, pal_);
+            const Vec2 block = view * Vec2(x + 520, kGround - 60);
+            drawBlock(fb, block.x, block.y, 60, pal_);
+            drawSaw(fb, view * Vec2(x + 760, kGround - 90), 40, time_ * 4.0f, pal_);
+        }
+        drawCube(fb, view * Vec2(playerX_, kGround - 28), 56, 0.0f, pal_);
         drawHud(fb, 1, 0.0f, 1, pal_);
     }
 
 private:
+    static constexpr float kGround = 500.0f;
     Palette pal_ = defaultPalette();
-    float scroll_ = 0, prevScroll_ = 0, time_ = 0;
+    Camera cam_, prevCam_;
+    float playerX_ = 0, time_ = 0;
 };
 }  // namespace
 

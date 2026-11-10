@@ -1,5 +1,6 @@
 // Numeric checks for the graphics algorithms. No test framework needed:
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
+#include "game/camera.h"
 #include "game/game_loop.h"
 #include "math/mat3.h"
 #include "raster/circle.h"
@@ -223,6 +224,30 @@ static void testGameLoop() {
     CHECK(s3.updates == (int)((35 * 0.007 + 35 * 0.0213) * 60));
 }
 
+static void testCamera() {
+    Camera cam;
+    cam.scroll_x = 1000;
+    // world_to_screen() is translate(-scroll_x, 0): world x 1260 appears at screen x 260.
+    CHECK(near(cam.toScreen(Vec2(1260, 300)), Vec2(260, 300)));
+    // screen_to_world() is its exact inverse.
+    CHECK(near(cam.screen_to_world() * Vec2(260, 300), Vec2(1260, 300), 1e-3f));
+    // reset() keeps the player 260 px from the left and puts world ground y=500 at screen y=440.
+    cam.reset(Vec2(4000, 470), 500);
+    CHECK(near(cam.toScreen(Vec2(4000, 500)), Vec2(260, 440), 1e-3f));
+    // follow() scrolls horizontally with the player every step.
+    cam.follow(Vec2(4100, 470), 500, 1.0f / 60);
+    CHECK(std::fabs(cam.toScreen(Vec2(4100, 0)).x - 260) < 1e-3f);
+    // A player high above the ground pulls the camera up (scroll_y decreases), but never past it.
+    Camera up;
+    up.reset(Vec2(0, 470), 500);
+    for (int i = 0; i < 120; ++i) up.follow(Vec2(0, 40), 500, 1.0f / 60);
+    CHECK(up.scroll_y < 60 - 100 && up.toScreen(Vec2(0, 40)).y >= 149.0f);
+    // Shake offsets the screen without moving the world-space scroll.
+    Camera sh = cam;
+    sh.shake_x = 5;
+    CHECK(near(sh.toScreen(Vec2(4100, 0)) - cam.toScreen(Vec2(4100, 0)), Vec2(5, 0)));
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -231,6 +256,7 @@ int main() {
     testCurves();
     testMat3();
     testGameLoop();
+    testCamera();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
