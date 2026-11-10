@@ -2,6 +2,7 @@
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
 #include "game/camera.h"
 #include "game/game_loop.h"
+#include "game/player.h"
 #include "math/mat3.h"
 #include "raster/circle.h"
 #include "raster/clip.h"
@@ -248,6 +249,69 @@ static void testCamera() {
     CHECK(near(sh.toScreen(Vec2(4100, 0)) - cam.toScreen(Vec2(4100, 0)), Vec2(5, 0)));
 }
 
+// Simulate one jump on flat ground (y = 500) holding the jump for `holdSteps`; returns the apex height.
+static float jumpApex(int holdSteps) {
+    Player p;
+    p.reset(Vec2(0, 500 - Player::SIZE / 2), 0);
+    p.setHeld(holdSteps > 0);
+    p.jump();
+    float top = p.bottom();
+    for (int i = 0; i < 240; ++i) {
+        p.setHeld(i < holdSteps);
+        p.update(1.0f / 60);
+        top = std::min(top, p.bottom());
+        if (p.bottom() >= 500) { p.land(500); break; }
+    }
+    return 500 - top;
+}
+
+static void testPhysics() {
+    const float dt = 1.0f / 60;
+    // Gravity integration: 0.5 s of free fall from rest is close to g*t^2/2 = 150 px
+    // (semi-implicit Euler runs slightly ahead: 155 px) and the speed is exactly g*t.
+    Player p;
+    p.reset(Vec2(0, 0), 0);
+    p.on_ground = false;
+    for (int i = 0; i < 30; ++i) p.update(dt);
+    CHECK(std::fabs(p.pos.y - 155.0f) < 0.5f);
+    CHECK(std::fabs(p.vel.y - 600.0f) < 1e-2f);
+    // Terminal velocity caps the fall speed.
+    for (int i = 0; i < 120; ++i) p.update(dt);
+    CHECK(p.vel.y == Player::TERMINAL_VEL);
+    // Jump only from the ground; it sets vel.y = -600.
+    CHECK(!p.jump());
+    p.land(500);
+    CHECK(p.on_ground && p.bottom() == 500 && p.vel.y == 0);
+    CHECK(p.jump() && p.vel.y == -Player::JUMP_VEL && !p.on_ground);
+    // Horizontal run speed is constant.
+    Player r;
+    r.reset(Vec2(0, 0), 420);
+    for (int i = 0; i < 60; ++i) r.update(dt);
+    CHECK(std::fabs(r.pos.x - 420) < 1e-2f);
+    // A tap gives v^2 / 2g = 150 px (slightly less with Euler steps).
+    const float tap = jumpApex(0);
+    CHECK(tap > 140 && tap < 151);
+    // Holding raises the jump, and the extension is capped at 350 ms: holding for 2 s is the
+    // same as holding for exactly 21 steps (0.35 s).
+    const float held = jumpApex(120);
+    CHECK(held > tap + 35);
+    CHECK(std::fabs(held - jumpApex(21)) < 0.5f);
+    CHECK(jumpApex(10) > tap && jumpApex(10) < held);
+    // The cube spins in the air and settles on a quarter turn after landing.
+    Player s;
+    s.reset(Vec2(0, 500 - Player::SIZE / 2), 0);
+    s.jump();
+    for (int i = 0; i < 20; ++i) s.update(dt);
+    CHECK(s.angle > 1.0f);
+    s.land(500);
+    for (int i = 0; i < 30; ++i) {
+        s.update(dt);
+        s.land(500);
+    }
+    const float q = s.angle / (kPi / 2);
+    CHECK(std::fabs(q - std::round(q)) < 1e-4f);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -257,6 +321,7 @@ int main() {
     testMat3();
     testGameLoop();
     testCamera();
+    testPhysics();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

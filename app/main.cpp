@@ -3,6 +3,7 @@
 #include "core/window.h"
 #include "game/camera.h"
 #include "game/game_loop.h"
+#include "game/player.h"
 #include "game/sprites.h"
 #include "ui/ui.h"
 #include <cmath>
@@ -14,14 +15,19 @@ namespace {
 class DemoScene : public GameState {
 public:
     DemoScene() {
-        cam_.reset(Vec2(0, kGround - 28), kGround);
+        player_.reset(Vec2(0, kGround - Player::SIZE / 2), 300.0f);
+        cam_.reset(player_.pos, kGround);
         prevCam_ = cam_;
     }
-    void update(float dt, const Input&) override {
+    // Space / click jumps (hold for higher). Only the ground collides for now.
+    void update(float dt, const Input& in) override {
         prevCam_ = cam_;
-        playerX_ += 300.0f * dt;
         time_ += dt;
-        cam_.follow(Vec2(playerX_, kGround - 28), kGround, dt);
+        player_.setHeld(in.jumpHeld);
+        player_.update(dt);
+        if (player_.bottom() >= kGround) player_.land(kGround);
+        if (player_.on_ground && (in.jumpPressed || in.jumpHeld)) player_.jump();
+        cam_.follow(player_.pos, kGround, dt);
     }
     void render(Framebuffer& fb, float alpha) override {
         const Camera cam = Camera::lerp(prevCam_, cam_, alpha);
@@ -39,7 +45,8 @@ public:
             drawBlock(fb, block.x, block.y, 60, pal_);
             drawSaw(fb, view * Vec2(x + 760, kGround - 90), 40, time_ * 4.0f, pal_);
         }
-        drawCube(fb, view * Vec2(playerX_, kGround - 28), 56, 0.0f, pal_);
+        const Vec2 p = player_.prev + (player_.pos - player_.prev) * alpha;
+        drawCube(fb, view * p, 56, player_.prevAngle + (player_.angle - player_.prevAngle) * alpha, pal_);
         drawHud(fb, 1, 0.0f, 1, pal_);
     }
 
@@ -47,7 +54,8 @@ private:
     static constexpr float kGround = 500.0f;
     Palette pal_ = defaultPalette();
     Camera cam_, prevCam_;
-    float playerX_ = 0, time_ = 0;
+    Player player_;
+    float time_ = 0;
 };
 }  // namespace
 
