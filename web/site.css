@@ -48,6 +48,7 @@
 :root[data-theme="dark"] { color-scheme: dark; }
 
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html { scroll-behavior: smooth; scroll-padding-top: 72px; }
 body {
   margin: 0;
@@ -82,7 +83,9 @@ kbd {
 .px-head { margin: 0; font: 700 clamp(2rem, 6vw, 3.6rem)/1.05 var(--mono); letter-spacing: 0.02em; }
 .px-head.is-px { font-size: 0; line-height: 0; }
 .px-head .px-lines { display: flex; flex-direction: column; gap: calc(var(--px, 8px) * 3); }
-.px-head .px-line { height: calc(var(--px, 8px) * 7); }
+.px-head .px-line { display: block; height: calc(var(--px, 8px) * 8); }
+.px-head .px-line svg { height: calc(var(--px, 8px) * 8); margin: 0 auto 0 0; }
+.fault .px-head .px-line svg { margin: 0 auto; }
 .px-head.small { --px: 4px; font-size: 1.4rem; }
 .px-head.small.is-px { font-size: 0; }
 .px rect, .px-head rect { fill: currentColor; }
