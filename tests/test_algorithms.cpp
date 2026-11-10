@@ -1,6 +1,7 @@
 // Numeric checks for the graphics algorithms. No test framework needed:
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
 #include "game/camera.h"
+#include "game/collision.h"
 #include "game/game_loop.h"
 #include "game/player.h"
 #include "math/mat3.h"
@@ -312,6 +313,91 @@ static void testPhysics() {
     CHECK(std::fabs(q - std::round(q)) < 1e-4f);
 }
 
+static Obstacle makeObs(ObstacleType t, float x, float y, float w, float h, float r = 0) {
+    Obstacle o;
+    o.type = t;
+    o.x = x; o.y = y; o.w = w; o.h = h; o.radius = r;
+    return o;
+}
+
+// A player whose bottom-centre is at (x, bottom), having come from `fromBottom` last step.
+static Player playerAt(float x, float bottom, float fromBottom, float vy) {
+    Player p;
+    p.reset(Vec2(x, bottom - Player::SIZE / 2), 420);
+    p.prev = Vec2(x - 7, fromBottom - Player::SIZE / 2);
+    p.vel.y = vy;
+    p.on_ground = false;
+    return p;
+}
+
+static void testCollision() {
+    // Broad phase: AABB overlap, with touching edges not counting.
+    CHECK(aabb_overlap({0, 0, 10, 10}, {5, 5, 15, 15}));
+    CHECK(!aabb_overlap({0, 0, 10, 10}, {20, 0, 30, 10}));
+    CHECK(!aabb_overlap({0, 0, 10, 10}, {10, 0, 20, 10}));  // touching
+    // Segment intersection: crossing, parallel, collinear-overlapping.
+    CHECK(segments_intersect(Vec2(0, 0), Vec2(10, 10), Vec2(0, 10), Vec2(10, 0)));
+    CHECK(!segments_intersect(Vec2(0, 0), Vec2(10, 0), Vec2(0, 5), Vec2(10, 5)));
+    CHECK(segments_intersect(Vec2(0, 0), Vec2(10, 0), Vec2(5, 0), Vec2(15, 0)));
+    // Narrow phase: overlapping triangle/square, disjoint, and full containment.
+    const Polygon sq = makeRect(0, 0, 40, 40);
+    CHECK(polygon_overlap(sq, Polygon{Vec2(30, 50), Vec2(45, 20), Vec2(60, 50)}));
+    CHECK(!polygon_overlap(sq, Polygon{Vec2(60, 50), Vec2(75, 20), Vec2(90, 50)}));
+    CHECK(polygon_overlap(sq, makeRect(10, 10, 5, 5)));  // inside, no edges cross
+    CHECK(polygon_overlap(makeRect(10, 10, 5, 5), sq));
+    // Concave: a box sitting in the notch of an arrow is outside it even though their AABBs overlap.
+    const Polygon arrow = {Vec2(0, 20), Vec2(50, 20), Vec2(50, 0), Vec2(90, 40), Vec2(50, 80), Vec2(50, 60), Vec2(0, 60)};
+    CHECK(aabb_overlap(aabbOf(arrow), aabbOf(makeRect(10, 2, 10, 10))));
+    CHECK(!polygon_overlap(arrow, makeRect(10, 2, 10, 10)));
+
+    const float ground = 500;
+    // Death: the cube sits on top of a spike's point.
+    std::vector<Obstacle> spike = {makeObs(ObstacleType::Spike, 400, 450, 50, 50)};
+    Player p = playerAt(425, 470, 468, 100);
+    CollisionResult r = resolve(p, spike, ground, 0);
+    CHECK(r.dead && r.killer == 0);
+    // Forgiving hitbox: grazing the spike's AABB corner is survivable.
+    Player g = playerAt(400 - Player::SIZE / 2 + 6, 500, 500, 0);
+    CHECK(aabb_overlap(g.box(), spike[0].box()));
+    CHECK(!resolve(g, spike, ground, 0).dead);
+    // Landing: falling onto a block's top face snaps onto it and sets on_ground.
+    std::vector<Obstacle> block = {makeObs(ObstacleType::Block, 400, 440, 60, 60)};
+    Player l = playerAt(430, 446, 438, 300);
+    r = resolve(l, block, ground, 0);
+    CHECK(r.landed && !r.dead && l.on_ground && l.bottom() == 440);
+    // Running into the block's side kills.
+    Player side = playerAt(400 - Player::SIZE / 2 + 5, 500, 500, 0);
+    r = resolve(side, block, ground, 0);
+    CHECK(r.dead && r.killer == 0);
+    // Hitting the underside while rising kills.
+    std::vector<Obstacle> ceiling = {makeObs(ObstacleType::Block, 400, 300, 60, 60)};
+    Player up = playerAt(430, 400, 420, -500);
+    CHECK(resolve(up, ceiling, ground, 0).dead);
+    // Ground: falling below y=500 lands on it.
+    Player f = playerAt(100, 507, 495, 400);
+    r = resolve(f, {}, ground, 0);
+    CHECK(r.landed && f.bottom() == ground);
+    // Saw: a rotating 12-gon; deadly when touched, safe at a distance.
+    std::vector<Obstacle> saw = {makeObs(ObstacleType::Saw, 700, 430, 0, 0, 30)};
+    Player near1 = playerAt(700, 470, 470, 0);
+    CHECK(resolve(near1, saw, ground, 1.3f).dead);
+    Player far1 = playerAt(640, 500, 500, 0);
+    CHECK(!resolve(far1, saw, ground, 1.3f).dead);
+    // Orbs, pads and portals are reported, not fatal.
+    std::vector<Obstacle> misc = {makeObs(ObstacleType::Orb, 900, 350, 0, 0, 16),
+                                  makeObs(ObstacleType::Pad, 1000, 488, 50, 12),
+                                  makeObs(ObstacleType::Portal, 1200, 440, 44, 112)};
+    misc[2].target = 2;
+    Player o1 = playerAt(905, 380, 380, 0);
+    r = resolve(o1, misc, ground, 0);
+    CHECK(r.orb == 0 && !r.dead);
+    Player o2 = playerAt(1020, 500, 500, 0);
+    CHECK(resolve(o2, misc, ground, 0).pad == 1);
+    Player o3 = playerAt(1195, 500, 500, 0);
+    r = resolve(o3, misc, ground, 0);
+    CHECK(r.portal && r.portalTarget == 2);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -322,6 +408,7 @@ int main() {
     testGameLoop();
     testCamera();
     testPhysics();
+    testCollision();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
