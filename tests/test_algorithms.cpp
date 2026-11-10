@@ -3,6 +3,7 @@
 #include "game/camera.h"
 #include "game/collision.h"
 #include "game/game_loop.h"
+#include "game/level.h"
 #include "game/player.h"
 #include "math/mat3.h"
 #include "raster/circle.h"
@@ -398,6 +399,48 @@ static void testCollision() {
     CHECK(r.portal && r.portalTarget == 2);
 }
 
+static void testLevelLoader() {
+    // The format from the handoff spec.
+    const char* text =
+        "# PulseRun Level 1\n"
+        "width 10000\n"
+        "ground_y 500\n"
+        "bg_color 0x0d0d1a\n"
+        "\n"
+        "BLOCK   200  450  60  50\n"
+        "SPIKE   400  450\n"
+        "SAW     700  430  radius=20  speed=1.5\n"
+        "ORB     900  350\n"
+        "PORTAL  9800 400  target=2   # exit\n";
+    Level lvl;
+    std::string err;
+    CHECK(parseLevel(text, lvl, &err));
+    CHECK(lvl.width == 10000 && lvl.groundY == 500 && lvl.hasBg && lvl.bg.r == 0x0d && lvl.bg.b == 0x1a);
+    CHECK(lvl.obstacles.size() == 5);
+    const Obstacle& b = lvl.obstacles[0];
+    CHECK(b.type == ObstacleType::Block && b.x == 200 && b.y == 450 && b.w == 60 && b.h == 50);
+    const Obstacle& sp = lvl.obstacles[1];
+    CHECK(sp.type == ObstacleType::Spike && sp.x == 400 && sp.w == 50 && sp.y + sp.h == 500);  // base on the ground
+    const Obstacle& saw = lvl.obstacles[2];
+    CHECK(saw.type == ObstacleType::Saw && saw.radius == 20 && std::fabs(saw.speed - 1.5f) < 1e-6f);
+    CHECK(lvl.obstacles[3].type == ObstacleType::Orb && lvl.obstacles[3].radius == 16);
+    CHECK(lvl.endX() == 9800 && lvl.nextLevel() == 2);
+
+    // Obstacles are sorted by x whatever the file order; name keeps spaces.
+    Level l2;
+    CHECK(parseLevel("name THE DROP\nSPIKE 900 450\nSPIKE 100 450 40 40\nPAD 500 488\n", l2));
+    CHECK(l2.name == "THE DROP" && l2.obstacles[0].x == 100 && l2.obstacles[0].w == 40 && l2.obstacles[2].x == 900);
+    CHECK(l2.endX() == l2.width && l2.nextLevel() == 0);
+
+    // Errors carry the line number.
+    Level bad;
+    CHECK(!parseLevel("width 100\nSPIKES 1 2\n", bad, &err) && err.find("line 2") == 0);
+    CHECK(!parseLevel("BLOCK 1 2\n", bad, &err) && err.find("w h") != std::string::npos);
+    CHECK(!parseLevel("SAW 1 2 colour=3\n", bad, &err) && err.find("colour") != std::string::npos);
+    CHECK(!parseLevel("ground_y lots\n", bad, &err));
+    CHECK(!loadLevel("no/such/level.txt", bad, &err) && err.find("cannot open") == 0);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -409,6 +452,7 @@ int main() {
     testCamera();
     testPhysics();
     testCollision();
+    testLevelLoader();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }
