@@ -4,6 +4,14 @@ project(PulseRun CXX)
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 
+# The software renderer is ~10x slower unoptimised, so default to an optimised build.
+if(NOT CMAKE_BUILD_TYPE AND NOT CMAKE_CONFIGURATION_TYPES)
+  set(CMAKE_BUILD_TYPE Release CACHE STRING "Build type" FORCE)
+endif()
+
+# PULSERUN_HEADLESS=ON skips SDL2: the game then renders PNG files instead of opening a window.
+option(PULSERUN_HEADLESS "Build without a window (PNG output only)" OFF)
+
 if(MSVC)
   add_compile_options(/W3)
 else()
@@ -14,6 +22,34 @@ endif()
 file(GLOB_RECURSE PULSE_SOURCES CONFIGURE_DEPENDS src/*.cpp)
 add_library(pulse_core ${PULSE_SOURCES})
 target_include_directories(pulse_core PUBLIC src)
+
+# Window backend: Emscripten (browser canvas), SDL2 (desktop) or headless. See src/core/window.h.
+if(EMSCRIPTEN)
+  set(PULSERUN_BACKEND "web")
+elseif(NOT PULSERUN_HEADLESS)
+  find_package(SDL2 CONFIG QUIET)
+  if(SDL2_FOUND)
+    set(PULSERUN_BACKEND "sdl2")
+    target_compile_definitions(pulse_core PUBLIC PULSERUN_SDL)
+    target_link_libraries(pulse_core PUBLIC SDL2::SDL2)
+  else()
+    set(PULSERUN_BACKEND "headless")
+    message(STATUS "SDL2 not found: building the headless (PNG-only) game")
+  endif()
+else()
+  set(PULSERUN_BACKEND "headless")
+endif()
+message(STATUS "PulseRun window backend: ${PULSERUN_BACKEND}")
+
+# The game itself.
+add_executable(pulserun app/main.cpp)
+target_link_libraries(pulserun pulse_core)
+target_compile_definitions(pulserun PRIVATE PULSERUN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
+if(EMSCRIPTEN)
+  # pulserun.js + pulserun.wasm, loaded by web/index.html. Level files are embedded.
+  target_link_options(pulserun PRIVATE -sALLOW_MEMORY_GROWTH=1 -sENVIRONMENT=web
+                      "--embed-file=${CMAKE_SOURCE_DIR}/levels@/levels")
+endif()
 
 # One demo executable per graphics technique, plus the setup smoke test.
 set(DEMOS setup lines circles polygons clipping curves scenes)

@@ -21,6 +21,9 @@ public:
     bool saveBMP(const std::string& path) const;  // 24-bit BMP, hand-written encoder
     bool savePNG(const std::string& path) const;  // PNG with stored (uncompressed) deflate blocks
 
+    // Raw RGBA pixels, row-major from the top-left (used by the window to blit a frame).
+    const Color* data() const { return px_.data(); }
+
     int width() const { return w_; }
     int height() const { return h_; }
 
