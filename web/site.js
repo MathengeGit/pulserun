@@ -263,8 +263,23 @@
   window.addEventListener('scroll', function () { loupe.hidden = true; }, { passive: true });
 
   getJSON('font.json').then(renderPixelType).catch(function () { /* text fallback stays */ });
-  getJSON('build.json').then(fillBuild).catch(function () {
-    $('build-stamp').textContent = 'local preview';
-    $('plates-empty').hidden = false;
-  });
+  // Load the game with the commit SHA as a version, so a new deploy is never hidden behind
+  // a cached pulserun.js / pulserun.wasm (GitHub Pages caches files for 10 minutes).
+  function loadGame(version) {
+    var q = version ? '?v=' + encodeURIComponent(version) : '';
+    window.Module.locateFile = function (path) { return 'game/' + path + q; };
+    var s = document.createElement('script');
+    s.src = 'game/pulserun.js' + q;
+    s.async = true;
+    s.onerror = function () { window.dispatchEvent(new Event('pulserun-fault')); };
+    document.body.appendChild(s);
+  }
+  fetch('build.json?t=' + Date.now(), { cache: 'no-store' })
+    .then(function (r) { if (!r.ok) throw new Error(r.status); return r.json(); })
+    .then(function (b) { loadGame(b.short); fillBuild(b); })
+    .catch(function () {
+      loadGame('');
+      $('build-stamp').textContent = 'local preview';
+      $('plates-empty').hidden = false;
+    });
 })();
