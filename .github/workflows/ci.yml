@@ -138,6 +138,10 @@ jobs:
           cp -r native/shots _site/shots
           cp native/font.json _site/font.json
           mapfile -t c < native/commit.txt
+          # Version the page's own assets by commit so a new deploy is never mixed with a
+          # cached stylesheet or script (Pages caches files for 10 minutes).
+          sed -i -E "s/(site\.(css|js))\"/\1?v=${c[1]}\"/g" _site/index.html
+          grep -o 'site\.[a-z]*?v=[0-9a-f]*' _site/index.html
           tests=$(grep -o '[0-9]*/[0-9]* checks passed' native/test-results.txt || echo "unknown")
           python3 - "$tests" "${c[@]}" <<'PY'
           import json, sys, datetime, os
