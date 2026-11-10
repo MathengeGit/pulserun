@@ -1,4 +1,5 @@
 #include "game/world_render.h"
+#include "game/animation.h"
 #include "raster/circle.h"
 #include "raster/curve.h"
 #include "raster/line.h"
@@ -42,7 +43,19 @@ void drawObstacle(Framebuffer& fb, const World& w, size_t i, const Mat3& view, c
         if (w.orbUsed[i]) drawCircleThick(fb, (int)s.x, (int)s.y, (int)o.radius, 2, withAlpha(pal.accent, 90));
         else drawOrb(fb, s, (int)o.radius, 0.5f + 0.5f * std::sin(t * 6.0f), pal);
         break;
-    case ObstacleType::Pad: drawPad(fb, s.x + o.w / 2, s.y + o.h, pal); break;
+    case ObstacleType::Pad: {
+        // Spring compression plays for a moment after the pad fires.
+        static Animation spring;
+        if (spring.frames.empty()) spring = makePadSpring(pal);
+        if (w.padAge[i] < spring.duration()) {
+            spring.elapsed = w.padAge[i];
+            spring.update(0);
+            spring.draw(fb, Vec2(s.x + o.w / 2, s.y + o.h));
+        } else {
+            drawPad(fb, s.x + o.w / 2, s.y + o.h, pal);
+        }
+        break;
+    }
     case ObstacleType::Portal: drawPortal(fb, s, o.w / 2, o.h / 2, pal.neon2); break;
     }
 }

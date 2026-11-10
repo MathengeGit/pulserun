@@ -8,6 +8,7 @@
 struct WorldEvents {
     bool died = false, completed = false, jumped = false, orb = false, pad = false, landed = false;
     int killer = -1;
+    int orbIndex = -1, padIndex = -1;  // which orb / pad fired
 };
 
 // One attempt at a level: the player, the clock and per-object state. Deterministic: the

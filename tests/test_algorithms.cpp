@@ -1,5 +1,6 @@
 // Numeric checks for the graphics algorithms. No test framework needed:
 //   cmake --build build --target test_algorithms && ./build/test_algorithms
+#include "game/animation.h"
 #include "game/camera.h"
 #include "game/collision.h"
 #include "game/game_loop.h"
@@ -513,6 +514,56 @@ static void testWorld() {
     CHECK(p.complete && p.progress() == 1.0f);
 }
 
+static void testAnimation() {
+    // Frames advance at fps and a one-shot animation holds its last frame.
+    Animation a;
+    a.fps = 10;
+    std::vector<int> drawn;
+    for (int i = 0; i < 4; ++i) a.frames.push_back([&drawn, i](Framebuffer&, Vec2) { drawn.push_back(i); });
+    Framebuffer fb(4, 4);
+    a.update(0.05f);
+    a.draw(fb, Vec2());
+    a.update(0.10f);
+    a.draw(fb, Vec2());
+    CHECK(drawn.size() == 2 && drawn[0] == 0 && drawn[1] == 1);
+    a.update(5.0f);
+    CHECK(a.current == 3 && a.finished());
+    // Looping wraps around.
+    a.loop = true;
+    a.restart();
+    a.update(0.45f);
+    CHECK(a.current == 0 && !a.finished());
+    // The death burst is 5 frames at 15 fps (one third of a second), and each frame draws.
+    const Palette pal = defaultPalette();
+    Animation d = makeDeathBurst(pal, ClipRect{0, 0, 199, 199});
+    CHECK(d.frames.size() == 5 && d.fps == 15.0f && std::fabs(d.duration() - 1.0f / 3) < 1e-4f);
+    Framebuffer b(200, 200);
+    b.clear(rgb(0, 0, 0));
+    d.update(0.2f);
+    d.draw(b, Vec2(100, 100));
+    CHECK(d.current == 3 && countLit(b) > 200);
+    // The pad spring compresses: the plate is lower in the squashed frame than at rest.
+    auto topRow = [](const Framebuffer& f) {
+        for (int y = 0; y < f.height(); ++y)
+            for (int x = 0; x < f.width(); ++x)
+                if (f.getPixel(x, y).r) return y;
+        return f.height();
+    };
+    Framebuffer rest(120, 60), squashed(120, 60);
+    rest.clear(rgb(0, 0, 0));
+    squashed.clear(rgb(0, 0, 0));
+    drawPadCompressed(rest, 60, 50, 1.0f, pal);
+    drawPadCompressed(squashed, 60, 50, 0.25f, pal);
+    CHECK(topRow(squashed) > topRow(rest) + 5);
+    // Effects expire when their animation finishes.
+    Effects fx;
+    fx.spawn(makeOrbPop(pal), Vec2(10, 10));
+    fx.update(0.1f);
+    CHECK(!fx.empty());
+    fx.update(0.2f);
+    CHECK(fx.empty());
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -527,6 +578,7 @@ int main() {
     testLevelLoader();
     testWorld();
     testShippedLevels();
+    testAnimation();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

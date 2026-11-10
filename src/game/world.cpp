@@ -88,6 +88,7 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
         player.launch(PAD_VEL);
         padAge[pad] = 0;
         ev.pad = true;
+        ev.padIndex = pad;
     }
     lastPad_ = pad;
 
@@ -97,6 +98,7 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
         orbUsed[orb] = 1;
         buffer_ = 0;
         ev.orb = true;
+        ev.orbIndex = orb;
     }
 
     // Jump from the ground on a (buffered) press, or keep jumping while the input is held.

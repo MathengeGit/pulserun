@@ -31,6 +31,8 @@ void drawSpike(Framebuffer& fb, float centerX, float baseY, float w, float h, co
 void drawSaw(Framebuffer& fb, Vec2 center, float radius, float angle, const Palette& pal);
 void drawOrb(Framebuffer& fb, Vec2 center, int radius, float pulse, const Palette& pal);
 void drawPad(Framebuffer& fb, float centerX, float groundY, const Palette& pal);
+// Pad mid-bounce: a zigzag spring under the plate, `squash` 1 = rest, 0 = fully compressed.
+void drawPadCompressed(Framebuffer& fb, float centerX, float groundY, float squash, const Palette& pal);
 void drawPortal(Framebuffer& fb, Vec2 center, float halfW, float halfH, Color color);
 
 // ---- Player ----
