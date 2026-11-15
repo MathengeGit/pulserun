@@ -72,7 +72,7 @@ void Game::layoutScreen() {
     case Screen::Complete: {
         // After the last level the first button rolls the finale instead.
         const bool finale = lastLevel() && progress_.allCompleted((int)levels_.size());
-        buttons_ = stackButtons({finale ? "THE END" : "NEXT LEVEL", "REPLAY", "MAIN MENU"}, W / 2, 318, 300, 48, 12, p.cube);
+        buttons_ = stackButtons({finale ? "THE END" : "NEXT LEVEL", "REPLAY", "MAIN MENU"}, W / 2, 330, 300, 46, 10, p.cube);
         buttons_[0].enabled = finale || !lastLevel();
         break;
     }

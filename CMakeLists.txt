@@ -42,7 +42,7 @@ endif()
 message(STATUS "PulseRun window backend: ${PULSERUN_BACKEND}")
 
 # The game itself.
-add_executable(pulserun app/main.cpp)
+add_executable(pulserun app/main.cpp app/recorder.cpp)
 target_link_libraries(pulserun pulse_core)
 target_compile_definitions(pulserun PRIVATE PULSERUN_SOURCE_DIR="${CMAKE_SOURCE_DIR}")
 if(EMSCRIPTEN)

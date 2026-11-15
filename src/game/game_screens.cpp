@@ -231,10 +231,10 @@ void Game::drawCompleteOverlay(Framebuffer& fb) {
     char buf[64];
     std::snprintf(buf, sizeof buf, "ATTEMPTS  %d", attempt_);
     drawTextCentered(fb, W / 2, 200, buf, 3, kText);
-    drawTextCentered(fb, W / 2, 234, "TIME  " + fmtTime(world_.time), 3, kText);
+    drawTextCentered(fb, W / 2, 234, "TIME  " + fmtTime(world_.clock), 3, kText);
     drawTextCentered(fb, W / 2, 268, (newBest_ ? "NEW BEST  " : "BEST  ") + fmtTime(r.bestTime), 3,
                      newBest_ ? pal_.accent : kDim);
-    drawTextCentered(fb, W / 2, 296, std::string("ON ") + difficultyName(difficulty()), 2, modeColour(difficulty()));
+    drawTextCentered(fb, W / 2, 298, std::string("ON ") + difficultyName(difficulty()), 2, modeColour(difficulty()));
     drawButtons(fb);
     if (lastLevel() && buttons_[0].enabled && focus_ == 0) {
         const float left = std::max(0.0f, 1.0f - screenTime_ / kFinaleDelay);

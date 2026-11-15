@@ -2,6 +2,7 @@
 //   pulserun                      play (SDL2 window on desktop, <canvas> in the browser)
 //   pulserun --showcase <dir>     render every screen to PNG, no window needed (used by CI)
 //   pulserun --analyse            print the timing window of every jump, per level and difficulty
+//   pulserun --record <dir>       record the demo videos through ffmpeg (app/recorder.cpp)
 //   pulserun --help
 // A headless build (no SDL2) has no window, so it always renders the showcase.
 #include "core/storage.h"
@@ -9,6 +10,7 @@
 #include "game/game.h"
 #include "game/game_loop.h"
 #include "game/solver.h"
+#include "recorder.h"
 #include <algorithm>
 #include <cstdio>
 #include <cstring>
@@ -95,7 +97,7 @@ int runShowcase(const std::vector<Level>& levels, const std::string& dir) {
     s.step(Input{}, 10);
     s.shot("12_game_settings.png");
 
-    const SolveResult plan1 = solveLevel(levels[0]);
+    const SolveResult plan1 = solveLevel(levels[0], 400000, game.rules());
     s.play(0, plan1.held, 0.43f);
     s.shot("13_game_play.png");
     game.setHitboxes(true);
@@ -122,6 +124,41 @@ int runShowcase(const std::vector<Level>& levels, const std::string& dir) {
     s.shot("18_game_complete.png");
     if (game.screen() != Screen::Complete) {
         std::fprintf(stderr, "Showcase: level 1 plan did not reach the complete screen\n");
+        ++s.failures;
+    }
+
+    // EASY: checkpoint flags along the ground and the CHECKPOINT toast.
+    game.setDifficulty(Difficulty::Easy);
+    const SolveResult easy1 = solveLevel(levels[0], 400000, game.rules());
+    game.startLevel(0);
+    {
+        bool prev = false;
+        for (size_t i = 0; i < easy1.held.size() && game.checkpointsTaken() < 1; ++i) {
+            Input in;
+            in.jumpHeld = easy1.held[i] != 0;
+            in.jumpPressed = in.jumpHeld && !prev;
+            prev = in.jumpHeld;
+            s.step(in);
+        }
+        s.step(Input{}, 12);
+    }
+    s.shot("19_game_easy_checkpoint.png");
+    game.setDifficulty(Difficulty::Normal);
+
+    // The game-beaten finale: clear every level, then let the last complete screen roll it.
+    for (int i = 0; i < game.levelCount(); ++i) {
+        s.play(i, solveLevel(levels[i], 400000, game.rules()).held, 1.0f);
+        for (int k = 0; k < 600 && game.screen() == Screen::Playing; ++k) s.step();
+    }
+    for (int k = 0; k < 600 && game.screen() == Screen::Complete; ++k) s.step();
+    s.step(Input{}, (int)(5.3f * 60));
+    s.shot("20_game_finale_cards.png");
+    s.step(Input{}, (int)(3.3f * 60));
+    s.shot("21_game_finale_heartbeat.png");
+    s.step(Input{}, (int)(6.4f * 60));
+    s.shot("22_game_finale_credits.png");
+    if (game.screen() != Screen::Finale) {
+        std::fprintf(stderr, "Showcase: clearing every level did not reach the finale\n");
         ++s.failures;
     }
     return s.failures == 0 ? 0 : 1;
@@ -163,18 +200,23 @@ int runAnalyse(const std::vector<Level>& levels) {
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string showcaseDir;
+    std::string showcaseDir, recordDir, ffmpeg = "ffmpeg";
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--help")) {
-            std::printf("pulserun                   play\n"
-                        "pulserun --showcase <dir>  render every screen to PNG files in <dir>\n");
+            std::printf("pulserun                                  play\n"
+                        "pulserun --showcase <dir>                 render every screen to PNG files in <dir>\n"
+                        "pulserun --analyse                        timing window of every jump, per difficulty\n"
+                        "pulserun --record <dir> [--ffmpeg <exe>]  record the demo videos (needs ffmpeg)\n");
             return 0;
         }
         if (!std::strcmp(argv[i], "--showcase") && i + 1 < argc) showcaseDir = argv[++i];
+        if (!std::strcmp(argv[i], "--record") && i + 1 < argc) recordDir = argv[++i];
+        if (!std::strcmp(argv[i], "--ffmpeg") && i + 1 < argc) ffmpeg = argv[++i];
         if (!std::strcmp(argv[i], "--analyse")) return runAnalyse(loadLevels());
     }
     static std::vector<Level> levels = loadLevels();
     if (!showcaseDir.empty()) return runShowcase(levels, showcaseDir);
+    if (!recordDir.empty()) return runRecord(levels, recordDir, ffmpeg);
 
     static Window win(1280, 720, "PulseRun");
     if (!win.ok()) {

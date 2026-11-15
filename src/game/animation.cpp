@@ -7,12 +7,14 @@ void Animation::update(float dt) {
     if (frames.empty()) return;
     elapsed += dt;
     const int n = (int)frames.size();
-    const int f = (int)(elapsed * fps);
+    // A negative `elapsed` is a start delay (staggered effects): hold frame 0 until it passes.
+    const int f = std::max(0, (int)(elapsed * fps));
     current = loop ? f % n : std::min(f, n - 1);
 }
 
 void Animation::draw(Framebuffer& fb, Vec2 pos) const {
-    if (!frames.empty()) frames[current](fb, pos);
+    if (frames.empty() || elapsed < 0.0f) return;  // still waiting out its start delay
+    frames[std::clamp(current, 0, (int)frames.size() - 1)](fb, pos);
 }
 
 Animation makeDeathBurst(const Palette& pal, const ClipRect& viewport) {

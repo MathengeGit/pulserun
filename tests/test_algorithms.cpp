@@ -517,6 +517,21 @@ static void testWorld() {
 }
 
 static void testAnimation() {
+    // A negative elapsed time is a start delay: nothing is drawn and no frame index goes negative.
+    {
+        Animation delayed;
+        delayed.fps = 20;
+        int calls = 0;
+        for (int i = 0; i < 3; ++i) delayed.frames.push_back([&calls](Framebuffer&, Vec2) { ++calls; });
+        delayed.elapsed = -0.24f;
+        delayed.update(1.0f / 60);
+        Framebuffer tiny(4, 4);
+        delayed.draw(tiny, Vec2());
+        CHECK(delayed.current == 0 && calls == 0);
+        delayed.update(0.3f);
+        delayed.draw(tiny, Vec2());
+        CHECK(calls == 1);
+    }
     // Frames advance at fps and a one-shot animation holds its last frame.
     Animation a;
     a.fps = 10;
