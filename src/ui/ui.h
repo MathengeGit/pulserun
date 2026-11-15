@@ -19,4 +19,6 @@ void drawLevelCard(Framebuffer& fb, int x, int y, int w, int h, const std::strin
 // ---- Screens ----
 void drawLogo(Framebuffer& fb, int cx, int y, int scale, const Palette& pal);
 void drawPulseLine(Framebuffer& fb, int x0, int x1, int y, float amplitude, Color c);
-void drawHud(Framebuffer& fb, int levelNo, float progress, int attempt, const Palette& pal);
+// `mode` (EASY / NORMAL / HARD) is drawn under the level number in `modeColour`.
+void drawHud(Framebuffer& fb, int levelNo, float progress, int attempt, const Palette& pal,
+             const std::string& mode = "", Color modeColour = Color{255, 255, 255, 255});

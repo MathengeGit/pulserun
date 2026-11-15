@@ -1,4 +1,5 @@
 #pragma once
+#include "game/difficulty.h"
 #include "game/obstacle.h"
 #include "game/player.h"
 #include <vector>
@@ -29,5 +30,7 @@ struct CollisionResult {
 constexpr float kLandTolerance = 10.0f;
 
 // Resolves the player against the ground (y = groundY) and every obstacle after a physics
-// step. Landing snaps the player onto the surface and sets on_ground.
-CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float groundY, float time);
+// step. Landing snaps the player onto the surface and sets on_ground. `rules` sets the
+// hitbox forgiveness (default: HARD, the original tuning).
+CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float groundY, float time,
+                        const Rules& rules = Rules{});

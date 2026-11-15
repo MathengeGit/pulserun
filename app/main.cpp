@@ -1,6 +1,8 @@
 // PulseRun entry point.
 //   pulserun                      play (SDL2 window on desktop, <canvas> in the browser)
 //   pulserun --showcase <dir>     render every screen to PNG, no window needed (used by CI)
+//   pulserun --analyse            print the timing window of every jump, per level and difficulty
+//   pulserun --record <dir>       record the demo videos through ffmpeg (app/recorder.cpp)
 //   pulserun --help
 // A headless build (no SDL2) has no window, so it always renders the showcase.
 #include "core/storage.h"
@@ -8,6 +10,8 @@
 #include "game/game.h"
 #include "game/game_loop.h"
 #include "game/solver.h"
+#include "recorder.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -93,7 +97,7 @@ int runShowcase(const std::vector<Level>& levels, const std::string& dir) {
     s.step(Input{}, 10);
     s.shot("12_game_settings.png");
 
-    const SolveResult plan1 = solveLevel(levels[0]);
+    const SolveResult plan1 = solveLevel(levels[0], 400000, game.rules());
     s.play(0, plan1.held, 0.43f);
     s.shot("13_game_play.png");
     game.setHitboxes(true);
@@ -122,23 +126,97 @@ int runShowcase(const std::vector<Level>& levels, const std::string& dir) {
         std::fprintf(stderr, "Showcase: level 1 plan did not reach the complete screen\n");
         ++s.failures;
     }
+
+    // EASY: checkpoint flags along the ground and the CHECKPOINT toast.
+    game.setDifficulty(Difficulty::Easy);
+    const SolveResult easy1 = solveLevel(levels[0], 400000, game.rules());
+    game.startLevel(0);
+    {
+        bool prev = false;
+        for (size_t i = 0; i < easy1.held.size() && game.checkpointsTaken() < 1; ++i) {
+            Input in;
+            in.jumpHeld = easy1.held[i] != 0;
+            in.jumpPressed = in.jumpHeld && !prev;
+            prev = in.jumpHeld;
+            s.step(in);
+        }
+        s.step(Input{}, 12);
+    }
+    s.shot("19_game_easy_checkpoint.png");
+    game.setDifficulty(Difficulty::Normal);
+
+    // The game-beaten finale: clear every level, then let the last complete screen roll it.
+    for (int i = 0; i < game.levelCount(); ++i) {
+        s.play(i, solveLevel(levels[i], 400000, game.rules()).held, 1.0f);
+        for (int k = 0; k < 600 && game.screen() == Screen::Playing; ++k) s.step();
+    }
+    for (int k = 0; k < 600 && game.screen() == Screen::Complete; ++k) s.step();
+    s.step(Input{}, (int)(5.3f * 60));
+    s.shot("20_game_finale_cards.png");
+    s.step(Input{}, (int)(3.3f * 60));
+    s.shot("21_game_finale_heartbeat.png");
+    s.step(Input{}, (int)(6.4f * 60));
+    s.shot("22_game_finale_credits.png");
+    if (game.screen() != Screen::Finale) {
+        std::fprintf(stderr, "Showcase: clearing every level did not reach the finale\n");
+        ++s.failures;
+    }
     return s.failures == 0 ? 0 : 1;
+}
+
+// ---------- Difficulty analysis: how forgiving is each jump? ----------
+
+int runAnalyse(const std::vector<Level>& levels) {
+    std::printf("Timing windows: frames (1/60 s) a press may move and the run still survives.\n");
+    std::printf("%-12s %-7s %6s %5s %6s %7s %8s  tightest (x:frames)\n", "level", "mode", "jumps", "min", "median",
+                "<=3fr", "seconds");
+    int bad = 0;
+    for (const Level& l : levels)
+        for (int d = 0; d < kDifficultyCount; ++d) {
+            const Rules r = rulesFor((Difficulty)d);
+            const SolveResult s = solveLevel(l, 400000, r);
+            if (!s.solved) {
+                std::printf("%-12s %-7s UNSOLVED (best %d%%)\n", l.name.c_str(), r.name, (int)(s.best * 100));
+                ++bad;
+                continue;
+            }
+            std::vector<TimingWindow> w = timingWindows(l, r, s.held);
+            std::vector<int> f;
+            for (const TimingWindow& t : w) f.push_back(t.frames());
+            std::vector<int> sorted = f;
+            std::sort(sorted.begin(), sorted.end());
+            const int tight = (int)std::count_if(f.begin(), f.end(), [](int v) { return v <= 3; });
+            std::sort(w.begin(), w.end(), [](const TimingWindow& a, const TimingWindow& b) { return a.frames() < b.frames(); });
+            std::string worst;
+            for (size_t i = 0; i < w.size() && i < 6; ++i)
+                worst += " " + std::to_string((int)w[i].x) + (w[i].orb ? "o" : "") + ":" + std::to_string(w[i].frames());
+            std::printf("%-12s %-7s %6d %5d %6d %7d %8.1f %s\n", l.name.c_str(), r.name, (int)f.size(),
+                        sorted.empty() ? 0 : sorted.front(), sorted.empty() ? 0 : sorted[sorted.size() / 2], tight,
+                        s.held.size() / 60.0, worst.c_str());
+        }
+    return bad == 0 ? 0 : 1;
 }
 
 }  // namespace
 
 int main(int argc, char** argv) {
-    std::string showcaseDir;
+    std::string showcaseDir, recordDir, ffmpeg = "ffmpeg";
     for (int i = 1; i < argc; ++i) {
         if (!std::strcmp(argv[i], "--help")) {
-            std::printf("pulserun                   play\n"
-                        "pulserun --showcase <dir>  render every screen to PNG files in <dir>\n");
+            std::printf("pulserun                                  play\n"
+                        "pulserun --showcase <dir>                 render every screen to PNG files in <dir>\n"
+                        "pulserun --analyse                        timing window of every jump, per difficulty\n"
+                        "pulserun --record <dir> [--ffmpeg <exe>]  record the demo videos (needs ffmpeg)\n");
             return 0;
         }
         if (!std::strcmp(argv[i], "--showcase") && i + 1 < argc) showcaseDir = argv[++i];
+        if (!std::strcmp(argv[i], "--record") && i + 1 < argc) recordDir = argv[++i];
+        if (!std::strcmp(argv[i], "--ffmpeg") && i + 1 < argc) ffmpeg = argv[++i];
+        if (!std::strcmp(argv[i], "--analyse")) return runAnalyse(loadLevels());
     }
     static std::vector<Level> levels = loadLevels();
     if (!showcaseDir.empty()) return runShowcase(levels, showcaseDir);
+    if (!recordDir.empty()) return runRecord(levels, recordDir, ffmpeg);
 
     static Window win(1280, 720, "PulseRun");
     if (!win.ok()) {

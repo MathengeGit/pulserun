@@ -136,6 +136,7 @@ jobs:
           rm -f _site/export_font.py
           cp webbuild/pulserun.js webbuild/pulserun.wasm _site/game/
           cp -r native/shots _site/shots
+          if [ -d docs/videos ]; then cp -r docs/videos _site/videos; fi
           cp native/font.json _site/font.json
           mapfile -t c < native/commit.txt
           # Version the page's own assets by commit so a new deploy is never mixed with a

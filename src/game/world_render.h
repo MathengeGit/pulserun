@@ -6,6 +6,8 @@
 struct RenderOptions {
     bool hitboxes = false;  // overlay collision polygons and AABBs (toggle with H)
     bool drawPlayer = true;
+    bool checkpoints = false;  // draw the level's checkpoint flags (EASY)
+    int checkpointsTaken = 0;  // flags behind the cube are drawn lit
 };
 
 // The default palette with the level's sky colour.

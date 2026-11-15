@@ -21,6 +21,7 @@
     <a href="#play">Play</a>
     <a href="#pipeline">Pipeline</a>
     <a href="#plates">Plates</a>
+    <a href="#reels">Reels</a>
     <a href="#build">Build</a>
   </nav>
   <button class="key help-key" type="button" data-help-open aria-haspopup="dialog" aria-controls="help">
@@ -108,9 +109,44 @@
     <p class="empty" id="plates-empty" hidden>No plates in this build. They are rendered by the CI pipeline.</p>
   </section>
 
-  <section id="build" class="section" aria-labelledby="build-title">
+  <section id="reels" class="section" aria-labelledby="reels-title">
     <header class="section-head">
       <span class="num mono">03</span>
+      <h2 id="reels-title" class="px-head" data-px="REELS">Reels</h2>
+      <p>Recorded by the game itself (<code>pulserun --record</code>): the solver plays, our rasteriser draws every
+        60 fps frame, and ffmpeg only compresses. <a href="videos/pulserun_demo_reel.mp4">Full demo reel</a> (2 min).</p>
+    </header>
+    <div class="plates">
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/01_level_complete.mp4#t=0.5" aria-label="Level complete: Reaching the portal: rings, attempts, time, then on to level 2"></video>
+        <figcaption class="mono"><b>Level complete</b> Reaching the portal: rings, attempts, time, then on to level 2</figcaption>
+      </figure>
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/02_easy.mp4#t=0.5" aria-label="EASY: World at 76 % speed, wide hitboxes; a crash returns to the last checkpoint flag"></video>
+        <figcaption class="mono"><b>EASY</b> World at 76 % speed, wide hitboxes; a crash returns to the last checkpoint flag</figcaption>
+      </figure>
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/03_normal.mp4#t=0.5" aria-label="NORMAL: World at 88 % speed, fairer hitboxes; the crashed screen retries by itself"></video>
+        <figcaption class="mono"><b>NORMAL</b> World at 88 % speed, fairer hitboxes; the crashed screen retries by itself</figcaption>
+      </figure>
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/04_hard.mp4#t=0.5" aria-label="HARD: The original tuning, with the full-size hitboxes shown"></video>
+        <figcaption class="mono"><b>HARD</b> The original tuning, with the full-size hitboxes shown</figcaption>
+      </figure>
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/05_difficulty_compare.mp4#t=0.5" aria-label="Side by side: All three modes at the same real time: same arcs, different clock"></video>
+        <figcaption class="mono"><b>Side by side</b> All three modes at the same real time: same arcs, different clock</figcaption>
+      </figure>
+      <figure class="plate reel">
+        <video controls preload="metadata" playsinline src="videos/06_finale.mp4#t=0.5" aria-label="The end: Finishing level 3 and the game-beaten finale with stats and credits"></video>
+        <figcaption class="mono"><b>The end</b> Finishing level 3 and the game-beaten finale with stats and credits</figcaption>
+      </figure>
+    </div>
+  </section>
+
+  <section id="build" class="section" aria-labelledby="build-title">
+    <header class="section-head">
+      <span class="num mono">04</span>
       <h2 id="build-title" class="px-head" data-px="BUILD SHEET">Build sheet</h2>
       <p>Every push to <code>main</code> is built, tested and redeployed here automatically.</p>
     </header>
@@ -149,6 +185,11 @@
     <tr><td><kbd>←</kbd> <kbd>→</kbd> <kbd>Enter</kbd></td><td>Move between buttons and choose</td></tr>
     <tr><td><kbd>?</kbd></td><td>Open or close this panel</td></tr>
   </table>
+  <h3>Difficulty</h3>
+  <p>Pick a mode in Settings or with the MODE button on the level select screen.
+    <b>Easy</b>: world at 76 % speed, smaller hitboxes, checkpoint flags.
+    <b>Normal</b> (default): 88 % speed, fairer hitboxes.
+    <b>Hard</b>: the original tuning.</p>
   <h3>How a frame is made</h3>
   <ol class="mini-pipe">
     <li>The fixed-timestep loop advances physics in 1/60 s steps.</li>

@@ -1,6 +1,7 @@
 #pragma once
 #include "game/animation.h"
 #include "game/camera.h"
+#include "game/difficulty.h"
 #include "game/game_state.h"
 #include "game/level.h"
 #include "game/progress.h"
@@ -9,7 +10,7 @@
 #include "ui/button.h"
 #include <vector>
 
-enum class Screen { Menu, LevelSelect, Settings, Playing, Paused, Dying, Dead, Complete };
+enum class Screen { Menu, LevelSelect, Settings, Playing, Paused, Dying, Dead, Complete, Finale };
 
 // The whole game: menus, level select, settings, play, pause, death and level-complete.
 // Every screen is keyboard (arrows/Enter/Esc), mouse and touch operable.
@@ -33,6 +34,16 @@ public:
     int attempt() const { return attempt_; }
     int levelCount() const { return (int)levels_.size(); }
     void setHitboxes(bool on) { progress_.hitboxes = on; }
+    Difficulty difficulty() const { return (Difficulty)progress_.difficulty; }
+    void setDifficulty(Difficulty d);
+    Rules rules() const { return rulesFor(difficulty()); }
+    int checkpointsTaken() const { return cpTaken_; }
+    float screenTime() const { return screenTime_; }
+
+    // Seconds the crashed screen waits before retrying by itself (NORMAL / HARD).
+    static constexpr float kAutoRetry = 1.6f;
+    // Seconds the last level's complete screen waits before rolling the finale.
+    static constexpr float kFinaleDelay = 3.5f;
 
 private:
     // ---- update per screen (game.cpp) ----
@@ -44,6 +55,9 @@ private:
     void updateDying(float dt);
     void updateDead(const Input& in);
     void updateComplete(const Input& in);
+    void updateFinale(const Input& in);
+    void respawnAtCheckpoint();
+    bool lastLevel() const { return levelIndex_ + 1 >= (int)levels_.size(); }
     // Shared button-list navigation. Returns the index chosen this step, or -1.
     int navigate(const std::vector<Button>& buttons, const Input& in, bool vertical, bool clickAnywhereChoosesFocus);
     void retry();
@@ -58,6 +72,7 @@ private:
     void drawPausedOverlay(Framebuffer& fb);
     void drawDeadOverlay(Framebuffer& fb);
     void drawCompleteOverlay(Framebuffer& fb);
+    void drawFinaleScreen(Framebuffer& fb);
     void drawButtons(Framebuffer& fb);
 
     std::vector<Level> levels_;
@@ -81,6 +96,11 @@ private:
     bool newBest_ = false;
     bool confirmReset_ = false;
     float hintTime_ = -1.0f;       // >= 0 while the first-run jump hint is showing
+
+    // EASY checkpoints: passing a flag saves it; dying respawns standing at the last one.
+    int cpTaken_ = 0;              // how many of the level's checkpoints are behind the cube
+    float cpToast_ = -1.0f;        // >= 0 while "CHECKPOINT" is showing
+    float finaleTime_ = 0.0f;
 
     static constexpr int kPauseX = 904, kPauseY = 54, kPauseS = 36;  // on-screen pause button (touch)
 };

@@ -19,8 +19,16 @@ bool Progress::recordDeath(int n, float p) {
     return false;
 }
 
-bool Progress::recordComplete(int n, float seconds) {
+bool Progress::allCompleted(int count) const {
+    if ((int)levels.size() < count) return false;
+    for (int i = 0; i < count; ++i)
+        if (!levels[i].completed) return false;
+    return true;
+}
+
+bool Progress::recordComplete(int n, float seconds, int difficulty) {
     LevelRecord& r = at(n);
+    r.clearedOn = std::max(r.clearedOn, difficulty);
     ++r.attempts;
     r.best = 1.0f;
     r.completed = true;
@@ -37,11 +45,12 @@ std::string Progress::serialize() const {
     o << "pulserun 1\n";
     o << "hitboxes " << (hitboxes ? 1 : 0) << "\n";
     o << "hint " << (seenHint ? 1 : 0) << "\n";
+    o << "mode " << difficulty << "\n";
     for (size_t i = 0; i < levels.size(); ++i) {
         const LevelRecord& r = levels[i];
         char buf[96];
-        std::snprintf(buf, sizeof buf, "level %d %.4f %.3f %d %d\n", (int)i + 1, r.best, r.bestTime, r.attempts,
-                      r.completed ? 1 : 0);
+        std::snprintf(buf, sizeof buf, "level %d %.4f %.3f %d %d %d\n", (int)i + 1, r.best, r.bestTime, r.attempts,
+                      r.completed ? 1 : 0, r.clearedOn);
         o << buf;
     }
     return o.str();
@@ -61,6 +70,9 @@ Progress Progress::parse(const std::string& text) {
         } else if (key == "hint") {
             int v = 0;
             if (ls >> v) p.seenHint = v != 0;
+        } else if (key == "mode") {
+            int v = 1;
+            if (ls >> v) p.difficulty = std::clamp(v, 0, 2);
         } else if (key == "level") {
             int n = 0, attempts = 0, done = 0;
             float best = 0, t = 0;
@@ -70,6 +82,9 @@ Progress Progress::parse(const std::string& text) {
                 r.bestTime = std::max(0.0f, t);
                 r.attempts = std::max(0, attempts);
                 r.completed = done != 0;
+                int cleared = -1;  // column added with difficulty modes; old saves lack it
+                if (ls >> cleared) r.clearedOn = std::clamp(cleared, -1, 2);
+                else if (r.completed) r.clearedOn = 2;  // saves from before the modes were HARD runs
             }
         }
     }
