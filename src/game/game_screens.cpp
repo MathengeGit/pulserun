@@ -1,6 +1,7 @@
 // Drawing for every Game screen. Menu, level select and death follow the Checkpoint 1
 // stills in docs/screenshots/ (07, 08, 09), now animated and interactive.
 #include "game/game.h"
+#include "game/finale.h"
 #include "raster/circle.h"
 #include "raster/font.h"
 #include "raster/polygon.h"
@@ -20,6 +21,23 @@ std::string fmtTime(float s) {
     char buf[32];
     std::snprintf(buf, sizeof buf, "%.2fS", s);
     return buf;
+}
+
+// One colour per difficulty: green EASY, yellow NORMAL, red HARD (matches the finale).
+Color modeColour(Difficulty d) {
+    switch (d) {
+    case Difficulty::Easy: return rgb(120, 232, 150);
+    case Difficulty::Normal: return rgb(255, 214, 90);
+    default: return rgb(255, 96, 120);
+    }
+}
+
+const char* modeBlurb(Difficulty d) {
+    switch (d) {
+    case Difficulty::Easy: return "SLOWER  -  WIDER HITBOXES  -  CHECKPOINTS";
+    case Difficulty::Normal: return "A LITTLE SLOWER  -  FAIRER HITBOXES";
+    default: return "THE ORIGINAL TUNING  -  NO MERCY";
+    }
 }
 
 // Focus ring for the round-cornered icon buttons on the menu.
@@ -47,6 +65,7 @@ void Game::render(Framebuffer& fb, float alpha) {
         drawPlay(fb, alpha);
         drawCompleteOverlay(fb);
         break;
+    case Screen::Finale: drawFinaleScreen(fb); break;
     }
 }
 
@@ -110,7 +129,20 @@ void Game::drawLevelSelect(Framebuffer& fb) {
         if (i == focus_ && !locked) drawRoundedRect(fb, b.x - 9, b.y - lift - 9, b.w + 18, b.h + 18, 22, kText, 2);
     }
     drawButton(fb, buttons_[4], focus_ == 4);
-    drawTextCentered(fb, W / 2, 425, "ARROWS TO CHOOSE  -  SPACE TO PLAY  -  ESC BACK", 2, rgb(200, 210, 255));
+    if (buttons_.size() > 5) {
+        Button mode = buttons_[5];
+        mode.accent = modeColour(difficulty());
+        drawButton(fb, mode, focus_ == 5);
+    }
+    // Which mode each level has been cleared on.
+    for (int i = 0; i < 4 && i < (int)levels_.size(); ++i) {
+        const int c = progress_.levels.size() > (size_t)i ? progress_.levels[i].clearedOn : -1;
+        if (c < 0) continue;
+        const Button& b = buttons_[i];
+        drawTextCentered(fb, b.x + b.w / 2, b.y + b.h + 12, std::string("CLEARED ") + difficultyName((Difficulty)c), 2,
+                         modeColour((Difficulty)c));
+    }
+    drawTextCentered(fb, W / 2, 440, "ARROWS TO CHOOSE  -  SPACE TO PLAY  -  ESC BACK", 2, rgb(200, 210, 255));
 }
 
 void Game::drawSettings(Framebuffer& fb) {
@@ -120,9 +152,9 @@ void Game::drawSettings(Framebuffer& fb) {
     drawOverlayPanel(fb, 220, 60, 520, 420, pal.neon);
     title(fb, W / 2, 92, "SETTINGS", 5, kText);
     drawButtons(fb);
-    drawTextCentered(fb, W / 2, 392, "SPACE / CLICK  JUMP (HOLD = HIGHER)", 2, kDim);
-    drawTextCentered(fb, W / 2, 416, "ESC  PAUSE    R  RESTART    H  HITBOXES", 2, kDim);
-    drawTextCentered(fb, W / 2, 440, "HITBOXES SHOW THE COLLISION POLYGONS", 2, kDim);
+    drawTextCentered(fb, W / 2, 390, modeBlurb(difficulty()), 2, modeColour(difficulty()));
+    drawTextCentered(fb, W / 2, 420, "SPACE / CLICK  JUMP (HOLD = HIGHER)", 2, kDim);
+    drawTextCentered(fb, W / 2, 444, "ESC  PAUSE    R  RESTART    H  HITBOXES", 2, kDim);
 }
 
 void Game::drawPlay(Framebuffer& fb, float alpha) {
@@ -131,6 +163,8 @@ void Game::drawPlay(Framebuffer& fb, float alpha) {
     RenderOptions opt;
     opt.hitboxes = progress_.hitboxes;
     opt.drawPlayer = !world_.complete;
+    opt.checkpoints = world_.rules.checkpoints;
+    opt.checkpointsTaken = cpTaken_;
     drawWorld(fb, world_, cam, alpha, pal_, opt);
     effects_.draw(fb, cam.world_to_screen());
     if (screen_ == Screen::Dying || screen_ == Screen::Dead) {
@@ -138,7 +172,16 @@ void Game::drawPlay(Framebuffer& fb, float alpha) {
         const int flash = screen_ == Screen::Dying ? std::max(26, 70 - (int)(screenTime_ * 200)) : 26;
         fb.fillRect(0, 0, W, H, withAlpha(pal_.hazard, flash));
     }
-    drawHud(fb, world_.level->number, world_.progress(), attempt_, pal_);
+    std::string mode = difficultyName(difficulty());
+    if (world_.rules.checkpoints && !world_.level->checkpoints.empty())
+        mode += "  CP " + std::to_string(cpTaken_) + "/" + std::to_string(world_.level->checkpoints.size());
+    drawHud(fb, world_.level->number, world_.progress(), attempt_, pal_, mode, modeColour(difficulty()));
+    if (cpToast_ >= 0 && screen_ == Screen::Playing) {
+        const float a = std::min(1.0f, std::min(cpToast_ * 6.0f, (1.4f - cpToast_) * 3.0f));
+        const int rise = (int)(10 * (1 - std::min(1.0f, cpToast_ * 4)));
+        drawTextCentered(fb, W / 2 + 2, 92 + rise + 2, "CHECKPOINT", 3, withAlpha(kShadow, (int)(200 * a)));
+        drawTextCentered(fb, W / 2, 92 + rise, "CHECKPOINT", 3, withAlpha(pal_.cube, (int)(255 * std::max(0.0f, a))));
+    }
     if (screen_ == Screen::Playing) {
         // Pause button for touch screens (two bars).
         fillRoundedRect(fb, kPauseX, kPauseY, kPauseS, kPauseS, 8, rgba(8, 10, 34, 170));
@@ -172,6 +215,12 @@ void Game::drawDeadOverlay(Framebuffer& fb) {
     drawTextCentered(fb, W / 2, 200, buf, 3, newBest_ ? pal_.cube : kDim);
     drawTextCentered(fb, W / 2, 246, "TAP, SPACE OR R TO RETRY", 2, pal_.accent);
     drawButtons(fb);
+    // Auto-retry countdown: a bar that drains under the RETRY button.
+    if (focus_ == 0 && !buttons_.empty()) {
+        const Button& b = buttons_[0];
+        const float left = std::max(0.0f, 1.0f - screenTime_ / kAutoRetry);
+        fb.fillRect(b.x + 10, b.y + b.h + 4, (int)((b.w - 20) * left), 4, pal_.accent);
+    }
 }
 
 void Game::drawCompleteOverlay(Framebuffer& fb) {
@@ -185,5 +234,27 @@ void Game::drawCompleteOverlay(Framebuffer& fb) {
     drawTextCentered(fb, W / 2, 234, "TIME  " + fmtTime(world_.time), 3, kText);
     drawTextCentered(fb, W / 2, 268, (newBest_ ? "NEW BEST  " : "BEST  ") + fmtTime(r.bestTime), 3,
                      newBest_ ? pal_.accent : kDim);
+    drawTextCentered(fb, W / 2, 296, std::string("ON ") + difficultyName(difficulty()), 2, modeColour(difficulty()));
     drawButtons(fb);
+    if (lastLevel() && buttons_[0].enabled && focus_ == 0) {
+        const float left = std::max(0.0f, 1.0f - screenTime_ / kFinaleDelay);
+        const Button& b = buttons_[0];
+        fb.fillRect(b.x + 10, b.y + b.h + 3, (int)((b.w - 20) * left), 3, pal_.accent);
+    }
+}
+
+void Game::drawFinaleScreen(Framebuffer& fb) {
+    FinaleStats st;
+    st.difficulty = difficultyName(difficulty());
+    for (size_t i = 0; i < levels_.size(); ++i) {
+        const LevelRecord r = i < progress_.levels.size() ? progress_.levels[i] : LevelRecord{};
+        st.levelNames.push_back(levels_[i].name);
+        st.levelTimes.push_back(r.bestTime);
+        st.levelAttempts.push_back(r.attempts);
+        st.totalAttempts += r.attempts;
+        st.totalTime += r.bestTime;
+    }
+    drawFinale(fb, finaleTime_, st, defaultPalette());
+    if (finaleTime_ >= finaleIntroDuration()) drawButtons(fb);
+    else if (finaleTime_ > 1.0f) drawTextCentered(fb, W - 120, H - 22, "SPACE TO SKIP", 2, withAlpha(kDim, 160));
 }

@@ -21,12 +21,13 @@ AABB Obstacle::box() const {
     }
 }
 
-Polygon Obstacle::hull(float time) const {
+Polygon Obstacle::hull(float time, float spikeInset, float sawScale) const {
     switch (type) {
     case ObstacleType::Spike:
         // Forgiving hitbox: the middle of the triangle, not its full base (as in most runners).
-        return {Vec2(x + w * 0.22f, y + h), Vec2(x + w * 0.5f, y + h * 0.22f), Vec2(x + w * 0.78f, y + h)};
-    case ObstacleType::Saw: return regularPolygon(Vec2(x, y), radius * 0.82f, 12, sawAngle(time));
+        return {Vec2(x + w * spikeInset, y + h), Vec2(x + w * 0.5f, y + h * spikeInset),
+                Vec2(x + w * (1 - spikeInset), y + h)};
+    case ObstacleType::Saw: return regularPolygon(Vec2(x, y), radius * sawScale, 12, sawAngle(time));
     case ObstacleType::Orb: {
         const float r = radius * 2.0f;  // generous trigger zone around the orb
         return makeRect(x - r, y - r, 2 * r, 2 * r);
@@ -99,7 +100,7 @@ bool polygon_overlap(const Polygon& a, const Polygon& b) {
 
 // ---------- Resolution ----------
 
-CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float groundY, float time) {
+CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float groundY, float time, const Rules& rules) {
     CollisionResult res;
     if (player.bottom() >= groundY) {
         player.land(groundY);
@@ -112,7 +113,9 @@ CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float 
         if (o.type != ObstacleType::Block) continue;
         const AABB b = o.box();
         if (!aabb_overlap(player.box(), b)) continue;
-        if (player.vel.y >= 0 && player.prevBottom() <= b.y0 + kLandTolerance) {
+        // Landing on the top face. Easier modes also forgive clipping the top corner by a
+        // few pixels (blockGrace) and pop the cube up onto the block instead.
+        if (player.vel.y >= 0 && player.prevBottom() <= b.y0 + kLandTolerance + rules.blockGrace) {
             player.land(b.y0);  // came down onto the top face
             res.landed = true;
         } else {
@@ -132,7 +135,7 @@ CollisionResult resolve(Player& player, const std::vector<Obstacle>& obs, float 
         switch (o.type) {
         case ObstacleType::Spike:
         case ObstacleType::Saw:
-            if (polygon_overlap(ph, o.hull(time))) {  // narrow phase
+            if (polygon_overlap(ph, o.hull(time, rules.spikeInset, rules.sawScale))) {  // narrow phase
                 res.dead = true;
                 res.killer = (int)i;
                 return res;

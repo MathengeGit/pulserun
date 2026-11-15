@@ -8,17 +8,20 @@ struct LevelRecord {
     float bestTime = 0.0f;  // fastest completion in seconds (0 = never completed)
     int attempts = 0;
     bool completed = false;
+    int clearedOn = -1;     // hardest Difficulty this level was completed on (-1 = never)
 };
 
 struct Progress {
     std::vector<LevelRecord> levels;
     bool hitboxes = false;  // settings
     bool seenHint = false;  // first-run "how to jump" hint already shown
+    int difficulty = 1;     // chosen Difficulty (0 easy, 1 normal, 2 hard)
 
     LevelRecord& at(int levelNumber);  // 1-based; grows as needed
     // Returns true if this run set a new best.
     bool recordDeath(int levelNumber, float progress);
-    bool recordComplete(int levelNumber, float seconds);
+    bool recordComplete(int levelNumber, float seconds, int difficulty = 2);
+    bool allCompleted(int levelCount) const;
 
     std::string serialize() const;
     static Progress parse(const std::string& text);  // tolerant: unknown or bad lines are skipped

@@ -20,6 +20,8 @@
 //   ORB     x y [radius=R] centre of a jump orb (default radius 16)
 //   PAD     x y [w h]      top-left of a jump pad (default 50 x 12)
 //   PORTAL  x y [target=N] centre of the exit portal; N = next level (0 = none)
+//   CHECKPOINT x           EASY mode respawn point: saved the first time the cube is
+//                          standing still past x (put it in a quiet stretch)
 //
 // Numbers may also be given as key=value (w=, h=, radius=, speed=, target=).
 struct Level {
@@ -32,6 +34,7 @@ struct Level {
     bool hasBg = false;
     Color bg{16, 22, 74, 255};
     std::vector<Obstacle> obstacles;  // sorted by x
+    std::vector<float> checkpoints;   // x positions, sorted
 
     // Where the run ends: the portal's x if there is one, else the level width.
     float endX() const;

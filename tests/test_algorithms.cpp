@@ -580,6 +580,14 @@ static void testProgressAndButtons() {
     CHECK(buttonAt(bs, 100, 40) == 1 && buttonAt(bs, 5, 5) == -1);
     bs[1].enabled = false;
     CHECK(buttonAt(bs, 100, 40) == -1 && moveFocus(bs, 0, 1) == 2 && moveFocus(bs, 2, 1) == 0);
+    // Difficulty and "cleared on" survive a round trip; saves from before modes count as HARD clears.
+    Progress m;
+    m.difficulty = 0;
+    m.recordComplete(2, 30.0f, 1);
+    const Progress m2 = Progress::parse(m.serialize());
+    CHECK(m2.difficulty == 0 && m2.levels[1].clearedOn == 1 && m2.levels[0].clearedOn == -1);
+    CHECK(Progress::parse("level 1 1.0 20.0 5 1\n").levels[0].clearedOn == 2);
+    CHECK(!m2.allCompleted(2) && Progress::parse("level 1 1 9 1 1\nlevel 2 1 9 1 1\n").allCompleted(2));
 }
 
 static void testGameFlow() {
@@ -631,7 +639,8 @@ static void testGameFlow() {
     g.update(dt, key(&Input::enterPressed));  // RETRY is focused
     CHECK(g.screen() == Screen::Playing && g.attempt() == 2);
     // A solved run reaches LEVEL COMPLETE with a best time, and NEXT LEVEL loads level 2.
-    const SolveResult plan = solveLevel(levels[0]);
+    CHECK(g.difficulty() == Difficulty::Normal);  // the default mode
+    const SolveResult plan = solveLevel(levels[0], 400000, g.rules());
     g.startLevel(0);
     bool prev = false;
     for (uint8_t h : plan.held) {
@@ -710,6 +719,183 @@ static void testCoverageExtras() {
     CHECK(hb.getPixel((int)std::lround(corner.x), (int)corner.y).g == 255);
 }
 
+
+// Feed a plan into a Game as key presses; returns the screen it ended on.
+static Screen playPlan(Game& g, const std::vector<uint8_t>& plan) {
+    bool prev = false;
+    for (uint8_t h : plan) {
+        if (g.screen() != Screen::Playing) break;
+        Input in;
+        in.jumpHeld = h != 0;
+        in.jumpPressed = in.jumpHeld && !prev;
+        prev = in.jumpHeld;
+        g.update(1.0f / 60, in);
+    }
+    for (int i = 0; i < 300 && g.screen() == Screen::Playing; ++i) g.update(1.0f / 60, Input{});
+    return g.screen();
+}
+
+static std::vector<Level> shippedLevels() {
+    std::vector<Level> levels;
+    for (int n = 1; n <= 9; ++n) {
+        Level l;
+        if (!loadLevel(std::string(PULSERUN_SOURCE_DIR) + "/levels/level" + std::to_string(n) + ".txt", l)) break;
+        levels.push_back(l);
+    }
+    return levels;
+}
+
+static void testDifficulty() {
+    // HARD is the original tuning; each easier mode is slower and more forgiving.
+    const Rules e = rulesFor(Difficulty::Easy), n = rulesFor(Difficulty::Normal), h = rulesFor(Difficulty::Hard);
+    const Rules original;
+    CHECK(h.timeScale == 1.0f && h.spikeInset == original.spikeInset && h.sawScale == original.sawScale &&
+          h.coyote == 0 && !h.checkpoints && h.buffer == World::JUMP_BUFFER);
+    CHECK(e.timeScale < n.timeScale && n.timeScale < h.timeScale);
+    CHECK(e.spikeInset > n.spikeInset && n.spikeInset > h.spikeInset);
+    CHECK(e.sawScale < n.sawScale && n.sawScale < h.sawScale);
+    CHECK(e.checkpoints && !n.checkpoints && std::string(difficultyName(Difficulty::Easy)) == "EASY");
+    // A narrower spike hull: a cube grazing the base corner dies on HARD, survives on EASY.
+    const Obstacle spike{ObstacleType::Spike, 400, 450, 50, 50};
+    Player p;
+    p.reset(Vec2(400 - 24 + 16, 476), 0);
+    CHECK(resolve(p, {spike}, 500, 0, h).dead);
+    p.reset(Vec2(400 - 24 + 16, 476), 0);
+    CHECK(!resolve(p, {spike}, 500, 0, e).dead);
+    // Time scale: same real time, less world time; the clock counts real seconds.
+    Level flat;
+    CHECK(parseLevel("width 5000\nSPIKE 4000 450\n", flat));
+    World we(&flat), wh(&flat);
+    we.setRules(e);
+    for (int i = 0; i < 60; ++i) {
+        we.step(1.0f / 60, false, false);
+        wh.step(1.0f / 60, false, false);
+    }
+    CHECK(std::fabs(we.clock - 1.0f) < 1e-3f && std::fabs(we.time - e.timeScale) < 1e-3f);
+    CHECK(we.player.pos.x < wh.player.pos.x);
+    // Coyote time: a press just after running off a ledge still jumps on EASY, not on HARD.
+    Level ledge;
+    CHECK(parseLevel("width 5000\nBLOCK 0 400 400 100\n", ledge));
+    auto offLedge = [&](const Rules& r) {
+        World w(&ledge);
+        w.setRules(r);
+        w.player.pos = w.player.prev = Vec2(300, 400 - 24);
+        bool wasOn = true;
+        for (int i = 0; i < 200; ++i) {
+            w.step(1.0f / 60, false, false);
+            if (wasOn && !w.player.on_ground && w.player.pos.y < 470) break;  // just left the ledge
+            wasOn = w.player.on_ground;
+        }
+        w.step(1.0f / 60, false, false);  // one more step in the air
+        return w.step(1.0f / 60, true, true).jumped;
+    };
+    CHECK(offLedge(e) && !offLedge(h));
+}
+
+static void testLevelsOnEveryDifficulty() {
+    const std::vector<Level> levels = shippedLevels();
+    CHECK(levels.size() >= 3);
+    // Minimum timing window (frames) each mode guarantees on every jump of the solved run.
+    const int floorFrames[kDifficultyCount] = {10, 8, 5};
+    for (const Level& l : levels)
+        for (int d = 0; d < kDifficultyCount; ++d) {
+            const Rules r = rulesFor((Difficulty)d);
+            const SolveResult s = solveLevel(l, 400000, r);
+            CHECK(s.solved);
+            bool completed = false;
+            CHECK(replayPlan(l, s.held, &completed, r) == 1.0f && completed);
+            int worst = 99;
+            for (const TimingWindow& w : timingWindows(l, r, s.held)) worst = std::min(worst, w.frames());
+            CHECK(worst >= floorFrames[d]);
+            if (worst < floorFrames[d])
+                std::cout << "  " << l.name << " " << r.name << " tightest window " << worst << " frames\n";
+        }
+}
+
+static void testCheckpoints() {
+    Level parsed;
+    CHECK(parseLevel("width 3000\nCHECKPOINT 2000\nCHECKPOINT 900\nSPIKE 400 450\n", parsed));
+    CHECK(parsed.checkpoints.size() == 2 && parsed.checkpoints[0] == 900 && parsed.obstacles.size() == 1);
+    CHECK(!parseLevel("CHECKPOINT\n", parsed));
+    // Every shipped checkpoint is safe: respawning there and doing nothing for a reaction time
+    // (0.4 s) still leaves the rest of the level beatable on EASY.
+    const Rules easy = rulesFor(Difficulty::Easy);
+    for (const Level& l : shippedLevels()) {
+        CHECK(l.checkpoints.size() >= 3);
+        int safe = 0;
+        for (float cx : l.checkpoints) {
+            World w(&l);
+            w.setRules(easy);
+            w.spawnAt(cx);
+            for (int i = 0; i < 24 && !w.dead; ++i) w.step(1.0f / 60, false, false);
+            const bool ok = !w.dead && solveFrom(w, 1e30f, 200000).solved;
+            safe += ok;
+            if (!ok) std::cout << "  " << l.name << " checkpoint x=" << (int)cx << " unsafe\n";
+        }
+        CHECK(safe == (int)l.checkpoints.size());
+    }
+    // In the game: EASY skips the crashed screen and respawns at the checkpoint.
+    std::vector<Level> levels = shippedLevels();
+    Game g(levels, false);
+    g.setDifficulty(Difficulty::Easy);
+    g.startLevel(0);
+    const SolveResult plan = solveLevel(levels[0], 400000, g.rules());
+    bool prev = false;
+    for (uint8_t h : plan.held) {  // play until the first checkpoint is taken
+        Input in;
+        in.jumpHeld = h != 0;
+        in.jumpPressed = in.jumpHeld && !prev;
+        prev = in.jumpHeld;
+        g.update(1.0f / 60, in);
+        if (g.checkpointsTaken() > 0) break;
+    }
+    CHECK(g.checkpointsTaken() == 1);
+    const float cpX = g.world().player.pos.x;
+    for (int i = 0; i < 900 && g.screen() == Screen::Playing; ++i) g.update(1.0f / 60, Input{});  // idle into a hazard
+    CHECK(g.screen() == Screen::Dying);
+    for (int i = 0; i < 120 && g.screen() == Screen::Dying; ++i) g.update(1.0f / 60, Input{});
+    CHECK(g.screen() == Screen::Playing && g.attempt() == 2 && cpX >= levels[0].checkpoints[0] &&
+          g.world().player.pos.x == levels[0].checkpoints[0] && g.world().player.on_ground);
+}
+
+static void testFinaleFlow() {
+    std::vector<Level> levels = shippedLevels();
+    Game g(levels, false);
+    // NORMAL crashed screen retries by itself after a moment.
+    g.startLevel(0);
+    for (int i = 0; i < 900 && g.screen() != Screen::Dead; ++i) g.update(1.0f / 60, Input{});
+    CHECK(g.screen() == Screen::Dead);
+    for (int i = 0; i < (int)(Game::kAutoRetry * 60) + 2 && g.screen() == Screen::Dead; ++i) g.update(1.0f / 60, Input{});
+    CHECK(g.screen() == Screen::Playing && g.attempt() == 2);
+    // Settings cycles the difficulty (first button) and it persists in the save text.
+    g.showScreen(Screen::Settings);
+    Input enter;
+    enter.enterPressed = true;
+    g.update(1.0f / 60, enter);
+    CHECK(g.difficulty() == Difficulty::Hard && g.progress().serialize().find("mode 2") != std::string::npos);
+    g.setDifficulty(Difficulty::Normal);
+    // Beat every level: the last complete screen rolls into the finale.
+    for (int i = 0; i < (int)levels.size(); ++i) {
+        g.startLevel(i);
+        CHECK(playPlan(g, solveLevel(levels[i], 400000, g.rules()).held) == Screen::Complete);
+        CHECK(g.progress().levels[i].clearedOn == (int)Difficulty::Normal);
+    }
+    for (int i = 0; i < (int)(Game::kFinaleDelay * 60) + 2 && g.screen() == Screen::Complete; ++i)
+        g.update(1.0f / 60, Input{});
+    CHECK(g.screen() == Screen::Finale);
+    Framebuffer fb(Game::W, Game::H);
+    g.render(fb, 0);
+    CHECK(distinctColours(fb) > 20);
+    // Space skips the intro; then PLAY AGAIN (focused) starts level 1.
+    for (int i = 0; i < 40; ++i) g.update(1.0f / 60, Input{});
+    Input space;
+    space.jumpPressed = space.jumpHeld = true;
+    g.update(1.0f / 60, space);
+    g.update(1.0f / 60, Input{});
+    g.update(1.0f / 60, enter);
+    CHECK(g.screen() == Screen::Playing && g.world().level->number == 1);
+}
+
 int main() {
     testBresenham();
     testCircleAndEllipse();
@@ -728,6 +914,10 @@ int main() {
     testProgressAndButtons();
     testGameFlow();
     testCoverageExtras();
+    testDifficulty();
+    testLevelsOnEveryDifficulty();
+    testCheckpoints();
+    testFinaleFlow();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
     return g_failures == 0 ? 0 : 1;
 }

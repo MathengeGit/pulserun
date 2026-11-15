@@ -10,7 +10,8 @@ void World::setLevel(const Level* l) {
 }
 
 void World::reset() {
-    time = 0;
+    time = clock = 0;
+    airborne_ = 0;
     dead = complete = false;
     killer = -1;
     steps = 0;
@@ -21,6 +22,14 @@ void World::reset() {
     player.reset(Vec2(level->startX(), level->groundY - Player::SIZE / 2), level->speed);
     orbUsed.assign(level->obstacles.size(), 0);
     padAge.assign(level->obstacles.size(), 99.0f);
+}
+
+void World::spawnAt(float x) {
+    reset();
+    if (!level) return;
+    player.reset(Vec2(x, level->groundY - Player::SIZE / 2), level->speed);
+    for (size_t i = 0; i < level->obstacles.size(); ++i)
+        if (level->obstacles[i].x < x) orbUsed[i] = 1;
 }
 
 float World::progress() const {
@@ -45,7 +54,7 @@ bool World::touchingUnusedOrb() const {
     nearby(a, b);
     for (size_t i = a; i < b; ++i) {
         const Obstacle& o = level->obstacles[i];
-        if (o.type == ObstacleType::Orb && !orbUsed[i] && aabb_overlap(player.box(), aabbOf(o.hull(time)))) return true;
+        if (o.type == ObstacleType::Orb && !orbUsed[i] && aabb_overlap(player.box(), aabbOf(o.hull(time, rules.spikeInset, rules.sawScale)))) return true;
     }
     return false;
 }
@@ -53,9 +62,11 @@ bool World::touchingUnusedOrb() const {
 WorldEvents World::step(float dt, bool held, bool pressed) {
     WorldEvents ev;
     if (!level || dead || complete) return ev;
+    clock += dt;
+    dt *= rules.timeScale;
     time += dt;
     ++steps;
-    if (pressed) buffer_ = JUMP_BUFFER;
+    if (pressed) buffer_ = rules.buffer;
     for (float& a : padAge) a += dt;
 
     player.setHeld(held);
@@ -64,7 +75,7 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
     size_t a, b;
     nearby(a, b);
     const std::vector<Obstacle> local(level->obstacles.begin() + a, level->obstacles.begin() + b);
-    const CollisionResult r = resolve(player, local, level->groundY, time);
+    const CollisionResult r = resolve(player, local, level->groundY, time, rules);
     ev.landed = r.landed;
     if (steps % 2 == 0) {
         trail.push_back(player.pos);
@@ -86,6 +97,7 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
     const int pad = r.pad >= 0 ? (int)(a + r.pad) : -1;
     if (pad >= 0 && pad != lastPad_) {
         player.launch(PAD_VEL);
+        airborne_ = 99.0f;
         padAge[pad] = 0;
         ev.pad = true;
         ev.padIndex = pad;
@@ -95,6 +107,7 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
     const int orb = r.orb >= 0 ? (int)(a + r.orb) : -1;
     if (orb >= 0 && !orbUsed[orb] && buffer_ > 0) {
         player.launch(ORB_VEL);
+        airborne_ = 99.0f;
         orbUsed[orb] = 1;
         buffer_ = 0;
         ev.orb = true;
@@ -102,9 +115,15 @@ WorldEvents World::step(float dt, bool held, bool pressed) {
     }
 
     // Jump from the ground on a (buffered) press, or keep jumping while the input is held.
-    if (player.on_ground && (buffer_ > 0 || held)) {
+    // Coyote time: a press just after running off a ledge still counts as a ground jump.
+    if (player.on_ground) airborne_ = 0;
+    else airborne_ += dt;
+    const bool coyote = !player.on_ground && player.vel.y >= 0 && airborne_ <= rules.coyote;
+    if ((player.on_ground && (buffer_ > 0 || held)) || (coyote && buffer_ > 0)) {
+        player.on_ground = true;  // jump() only fires from the ground
         player.jump();
         buffer_ = 0;
+        airborne_ = 99.0f;  // one coyote jump per ledge
         ev.jumped = true;
     }
     buffer_ = std::max(0.0f, buffer_ - dt);

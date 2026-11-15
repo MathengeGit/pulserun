@@ -173,10 +173,12 @@ void drawLogo(Framebuffer& fb, int cx, int y, int scale, const Palette& pal) {
     drawTextShadow(fb, x + textWidth(a, scale) + scale, y, b, scale, pal.neon2, rgb(6, 8, 30), std::max(3, scale / 2));
 }
 
-void drawHud(Framebuffer& fb, int levelNo, float progress, int attempt, const Palette& pal) {
+void drawHud(Framebuffer& fb, int levelNo, float progress, int attempt, const Palette& pal, const std::string& mode,
+             Color modeColour) {
     char buf[40];
     std::snprintf(buf, sizeof buf, "LEVEL %02d", levelNo);
     drawTextShadow(fb, 26, 20, buf, 2, rgb(235, 240, 255), rgb(6, 8, 30), 2);
+    if (!mode.empty()) drawTextShadow(fb, 26, 44, mode, 2, modeColour, rgb(6, 8, 30), 2);
     std::snprintf(buf, sizeof buf, "ATTEMPT %d", attempt);
     drawTextShadow(fb, fb.width() - 26 - textWidth(buf, 2), 20, buf, 2, rgb(235, 240, 255), rgb(6, 8, 30), 2);
 

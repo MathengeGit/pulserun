@@ -16,7 +16,9 @@ struct Obstacle {
 
     Vec2 centre() const;
     AABB box() const;                  // broad-phase bounds
-    Polygon hull(float time) const;    // exact collision shape at `time` seconds
+    // Exact collision shape at `time` seconds. `spikeInset` / `sawScale` come from the
+    // difficulty Rules (defaults = HARD, the original tuning).
+    Polygon hull(float time, float spikeInset = 0.22f, float sawScale = 0.82f) const;
     bool deadly() const { return type == ObstacleType::Spike || type == ObstacleType::Saw; }
     float sawAngle(float time) const { return time * speed * 6.2831853f; }
 };

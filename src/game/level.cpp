@@ -98,6 +98,13 @@ bool parseLevel(const std::string& text, Level& out, std::string* error) {
             continue;
         }
 
+        if (key == "CHECKPOINT") {
+            std::string v;
+            float f = 0;
+            if (!(ls >> v) || !toFloat(v, f)) return fail(error, lineNo, "CHECKPOINT needs an x");
+            lvl.checkpoints.push_back(f);
+            continue;
+        }
         Obstacle o;
         if (!typeFromName(key, o.type)) return fail(error, lineNo, "unknown object '" + key + "'");
         applyDefaults(o);
@@ -132,6 +139,7 @@ bool parseLevel(const std::string& text, Level& out, std::string* error) {
     }
     std::stable_sort(lvl.obstacles.begin(), lvl.obstacles.end(),
                      [](const Obstacle& a, const Obstacle& b) { return a.x < b.x; });
+    std::sort(lvl.checkpoints.begin(), lvl.checkpoints.end());
     out = std::move(lvl);
     return true;
 }

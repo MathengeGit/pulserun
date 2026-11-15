@@ -1,5 +1,6 @@
 #pragma once
 #include "game/collision.h"
+#include "game/difficulty.h"
 #include "game/level.h"
 #include "game/player.h"
 #include <vector>
@@ -24,16 +25,23 @@ public:
     explicit World(const Level* level) { setLevel(level); }
 
     void setLevel(const Level* level);
+    void setRules(const Rules& r) { rules = r; }
     void reset();
-    // Advance one fixed step. `held` is the jump input state, `pressed` its rising edge.
+    // EASY checkpoint respawn: a fresh run standing on the ground at world x, orbs behind it
+    // spent. Always the same state, so the tests can prove every checkpoint is safe.
+    void spawnAt(float x);
+    // Advance one fixed step of real time `dt`; the world itself advances dt * rules.timeScale.
+    // `held` is the jump input state, `pressed` its rising edge.
     WorldEvents step(float dt, bool held, bool pressed);
 
     float progress() const;  // 0..1 along the level
     bool touchingUnusedOrb() const;
 
     const Level* level = nullptr;
+    Rules rules;            // difficulty (default HARD = original tuning)
     Player player;
-    float time = 0.0f;
+    float time = 0.0f;      // world seconds (drives physics and saw spin)
+    float clock = 0.0f;     // real seconds played (shown as the run time)
     bool dead = false, complete = false;
     int killer = -1;
     int steps = 0;
@@ -44,6 +52,7 @@ public:
 private:
     void nearby(size_t& first, size_t& last) const;
     float buffer_ = 0.0f;
+    float airborne_ = 99.0f;  // world seconds since the cube last stood on something (coyote time)
     int lastPad_ = -1;
     float maxExtent_ = 0.0f;
 };

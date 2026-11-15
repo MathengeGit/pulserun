@@ -98,6 +98,21 @@ void drawWorld(Framebuffer& fb, const World& w, const Camera& cam, float alpha, 
         drawObstacle(fb, w, i, view, pal, t);
     }
 
+    if (opt.checkpoints) {
+        // A flag per checkpoint: a pole (thick line) and a pennant (scanline-filled triangle).
+        for (size_t i = 0; i < w.level->checkpoints.size(); ++i) {
+            const float cx = w.level->checkpoints[i];
+            if (cx < left || cx > right) continue;
+            const Vec2 base = view * Vec2(cx, w.level->groundY);
+            const bool lit = (int)i < opt.checkpointsTaken;
+            const Color c = lit ? pal.cube : withAlpha(pal.accent, 150);
+            drawThickLine(fb, base, base + Vec2(0, -78), 3.0f, c);
+            const float wave = std::sin(t * 5.0f + (float)i) * 4.0f;
+            fillPolygon(fb, {base + Vec2(2, -78), base + Vec2(34, -66 + wave), base + Vec2(2, -54)}, c);
+            fillCircle(fb, (int)base.x, (int)base.y - 80, 4, c);
+        }
+    }
+
     if (opt.drawPlayer && !w.dead) {
         const Vec2 pos = w.player.prev + (w.player.pos - w.player.prev) * alpha;
         // Motion trail: a Catmull-Rom spline through recent positions, fading toward the tail.

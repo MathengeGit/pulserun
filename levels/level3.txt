@@ -39,7 +39,7 @@ SPIKE 2750 450
 SPIKE 2800 450
 ORB   2600 340
 PAD   3050 488
-BLOCK 3300 240 60 260
+BLOCK 3300 290 60 210
 
 # --- Tunnel: tap to hop the floor spikes; a held jump hits the ceiling ----------
 BLOCK 3800 250 700 40
@@ -49,7 +49,7 @@ SPIKE 4250 450
 # --- Saw gauntlet ---------------------------------------------------------------
 SAW   4800 470 radius=34 speed=2
 SAW   5150 400 radius=24 speed=1.2
-SAW   5500 470 radius=34 speed=2
+SAW   5650 470 radius=34 speed=2
 SPIKE 5850 450
 SPIKE 5900 450
 SPIKE 5950 450
@@ -105,7 +105,15 @@ SPIKE 10850 450
 SPIKE 11200 450
 SPIKE 11250 450
 SPIKE 11300 450
-SAW   11700 470 radius=34 speed=2.4
+SAW   11820 470 radius=34 speed=2.4
+
+# --- EASY-mode checkpoints (respawn points in quiet stretches) ---------------
+CHECKPOINT 3400
+CHECKPOINT 5200
+CHECKPOINT 7550
+CHECKPOINT 8550
+CHECKPOINT 9800
+CHECKPOINT 11400
 
 # --- Last climb: wide steps at full speed -------------------------------------------
 BLOCK 12100 440 120 60

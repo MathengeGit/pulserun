@@ -1,6 +1,7 @@
 // PulseRun entry point.
 //   pulserun                      play (SDL2 window on desktop, <canvas> in the browser)
 //   pulserun --showcase <dir>     render every screen to PNG, no window needed (used by CI)
+//   pulserun --analyse            print the timing window of every jump, per level and difficulty
 //   pulserun --help
 // A headless build (no SDL2) has no window, so it always renders the showcase.
 #include "core/storage.h"
@@ -8,6 +9,7 @@
 #include "game/game.h"
 #include "game/game_loop.h"
 #include "game/solver.h"
+#include <algorithm>
 #include <cstdio>
 #include <cstring>
 #include <fstream>
@@ -125,6 +127,39 @@ int runShowcase(const std::vector<Level>& levels, const std::string& dir) {
     return s.failures == 0 ? 0 : 1;
 }
 
+// ---------- Difficulty analysis: how forgiving is each jump? ----------
+
+int runAnalyse(const std::vector<Level>& levels) {
+    std::printf("Timing windows: frames (1/60 s) a press may move and the run still survives.\n");
+    std::printf("%-12s %-7s %6s %5s %6s %7s %8s  tightest (x:frames)\n", "level", "mode", "jumps", "min", "median",
+                "<=3fr", "seconds");
+    int bad = 0;
+    for (const Level& l : levels)
+        for (int d = 0; d < kDifficultyCount; ++d) {
+            const Rules r = rulesFor((Difficulty)d);
+            const SolveResult s = solveLevel(l, 400000, r);
+            if (!s.solved) {
+                std::printf("%-12s %-7s UNSOLVED (best %d%%)\n", l.name.c_str(), r.name, (int)(s.best * 100));
+                ++bad;
+                continue;
+            }
+            std::vector<TimingWindow> w = timingWindows(l, r, s.held);
+            std::vector<int> f;
+            for (const TimingWindow& t : w) f.push_back(t.frames());
+            std::vector<int> sorted = f;
+            std::sort(sorted.begin(), sorted.end());
+            const int tight = (int)std::count_if(f.begin(), f.end(), [](int v) { return v <= 3; });
+            std::sort(w.begin(), w.end(), [](const TimingWindow& a, const TimingWindow& b) { return a.frames() < b.frames(); });
+            std::string worst;
+            for (size_t i = 0; i < w.size() && i < 6; ++i)
+                worst += " " + std::to_string((int)w[i].x) + (w[i].orb ? "o" : "") + ":" + std::to_string(w[i].frames());
+            std::printf("%-12s %-7s %6d %5d %6d %7d %8.1f %s\n", l.name.c_str(), r.name, (int)f.size(),
+                        sorted.empty() ? 0 : sorted.front(), sorted.empty() ? 0 : sorted[sorted.size() / 2], tight,
+                        s.held.size() / 60.0, worst.c_str());
+        }
+    return bad == 0 ? 0 : 1;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -136,6 +171,7 @@ int main(int argc, char** argv) {
             return 0;
         }
         if (!std::strcmp(argv[i], "--showcase") && i + 1 < argc) showcaseDir = argv[++i];
+        if (!std::strcmp(argv[i], "--analyse")) return runAnalyse(loadLevels());
     }
     static std::vector<Level> levels = loadLevels();
     if (!showcaseDir.empty()) return runShowcase(levels, showcaseDir);

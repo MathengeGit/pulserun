@@ -1,3 +1,10 @@
+# --- EASY-mode checkpoints (respawn points in quiet stretches) ---------------
+CHECKPOINT 2000
+CHECKPOINT 3880
+CHECKPOINT 4900
+CHECKPOINT 6550
+CHECKPOINT 8150
+
 # PulseRun Level 1 - PRIMER
 # Teaches one idea at a time: single, double, triple spikes, then orbs, saws, blocks, a pad.
 # Coordinates: BLOCK/SPIKE/PAD = top-left, SAW/ORB/PORTAL = centre. Ground surface at y=500.
@@ -51,7 +58,7 @@ SPIKE 3750 450
 SPIKE 3800 450
 ORB   3620 330
 
-SAW   4100 470 radius=34 speed=1.2
+SAW   4200 470 radius=34 speed=1.2
 
 # --- 6. A jump pad over a tall wall -----------------------------------------
 PAD   4550 488
