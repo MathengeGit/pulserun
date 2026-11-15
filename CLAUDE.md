@@ -17,7 +17,9 @@ This is a **Computer Graphics university semester project** (Strathmore Universi
 ## 2. Current state — what is done
 
 **All three milestones are complete (Checkpoints 1-4, tasks 1-13).** Do not re-implement anything already done.
-The game is playable on desktop (SDL2), in the browser (WebAssembly) and renders headlessly; 231 tests pass.
+The game is playable on desktop (SDL2), in the browser (WebAssembly) and renders headlessly; 301 tests pass.
+Difficulty modes (EASY/NORMAL/HARD), the timing-window analyser, EASY checkpoints, the finale and the demo
+videos (`docs/videos`, re-record with `pulserun --record`) were added in #36.
 
 | Area | Status | Location |
 |------|--------|----------|
@@ -32,7 +34,7 @@ The game is playable on desktop (SDL2), in the browser (WebAssembly) and renders
 | Levels 1-3, World simulation, solver that proves levels beatable (#21) | ✅ Done | `levels/`, `src/game/world*.cpp`, `solver.cpp` |
 | Animation system: death burst, pad spring, orb pop (#23) | ✅ Done | `src/game/animation.h/.cpp` |
 | Screens: menu, select, settings, pause, death, complete; saved progress (#25, #26) | ✅ Done | `src/game/game*.cpp`, `src/ui/button.*`, `progress.*`, `src/core/storage.*` |
-| Tests: 231 checks (#28) | ✅ Done | `tests/test_algorithms.cpp` |
+| Tests: 301 checks (#28, #36) | ✅ Done | `tests/test_algorithms.cpp` |
 | CI + live web deploy (#7) | ✅ Done | `.github/workflows/ci.yml`, `web/` |
 | README (#34) | ✅ Done | `README.md` |
 
@@ -57,7 +59,7 @@ src/
   game/        sprites, player, collision, level, world, solver, camera, loop, animation, game screens
   ui/          HUD, buttons, level cards, logo
 demos/         one .cpp per technique + four game-style scenes
-tests/         test_algorithms.cpp (231 checks)
+tests/         test_algorithms.cpp (301 checks)
 levels/        level1.txt, level2.txt, level3.txt
 web/           website around the live WebAssembly build
 docs/screenshots/  rendered PNGs used as evidence

@@ -21,6 +21,21 @@ Rendered by CI from the latest `main` (the game plays itself using the level sol
 | **Crashed** | **Level complete** |
 | ![Crashed](https://diorwachira.github.io/pulserun/shots/17_game_crashed.webp) | ![Complete](https://diorwachira.github.io/pulserun/shots/18_game_complete.webp) |
 
+## Demo videos
+
+Recorded by the game itself with `pulserun --record docs/videos`: the solver plays, our rasteriser draws every 60 fps
+frame, and ffmpeg only compresses the frames. Also playable on the [live site](https://diorwachira.github.io/pulserun/#reels).
+
+| Video | Shows |
+|---|---|
+| [01_level_complete.mp4](docs/videos/01_level_complete.mp4) | Reaching the portal: rings, attempts and time, then on to level 2 |
+| [02_easy.mp4](docs/videos/02_easy.mp4) | EASY: slower world, smaller hitboxes, a crash that respawns at the last checkpoint flag |
+| [03_normal.mp4](docs/videos/03_normal.mp4) | NORMAL: a crash and the crashed screen retrying by itself |
+| [04_hard.mp4](docs/videos/04_hard.mp4) | HARD: the original tuning with the full-size hitboxes shown |
+| [05_difficulty_compare.mp4](docs/videos/05_difficulty_compare.mp4) | All three modes side by side at the same real time |
+| [06_finale.mp4](docs/videos/06_finale.mp4) | The end of level 3 and the game-beaten finale (stats and credits) |
+| [pulserun_demo_reel.mp4](docs/videos/pulserun_demo_reel.mp4) | All of the above back to back (2 min) |
+
 Checkpoint 1 stills (committed): [gameplay](docs/screenshots/06_scene_gameplay.png), [menu](docs/screenshots/07_scene_menu.png),
 [level select](docs/screenshots/08_scene_level_select.png), [death](docs/screenshots/09_scene_death.png).
 Technique demos: [lines](docs/screenshots/01_lines.png), [circles & ellipses](docs/screenshots/02_circles.png),
@@ -49,6 +64,41 @@ finish the level. Best %, best time and attempts are saved (browser `localStorag
 | 1 | PRIMER | 10 000 px | 420 px/s | single, double, triple spikes; orbs; saws; blocks; a pad |
 | 2 | ESCALATION | 12 000 px | 460 px/s | orb chains, low ceilings, pads onto platforms, riding a roof |
 | 3 | ADVANCED | 14 000 px | 520 px/s | a tunnel (tap, don't hold), saw gauntlet, rising platforms |
+
+Finishing level 3 after clearing every level rolls the **finale**: the cube escapes the last portal, the levels stamp
+in as cleared, the pulse line flatlines and beats back, fireworks, then your stats and the credits (`src/game/finale.cpp`).
+
+## Difficulty
+
+Playtesting showed the original game was too hard (126 attempts to finish it), so there are now three modes. Choose one
+in **Settings** or with the **MODE** button on the level select screen. All three play the same level files.
+
+| | EASY | NORMAL (default) | HARD |
+|---|---|---|---|
+| World speed | 76 % | 88 % | 100 % (original) |
+| Spike hitbox (base kept) | middle 38 % | middle 46 % | middle 56 % |
+| Saw hitbox radius | 66 % | 74 % | 82 % |
+| Coyote time (jump just after a ledge) | 100 ms | 60 ms | none |
+| Jump buffer | 180 ms | 140 ms | 100 ms |
+| Block-corner forgiveness | 14 px | 8 px | none |
+| Checkpoints | yes (flags; a crash respawns at the last one) | no | no |
+
+Slowing the **world clock** rather than the run speed keeps every jump arc identical, so a level that is beatable on
+HARD is beatable on every mode; the player just gets more time to react. The rules live in `src/game/difficulty.h`.
+
+**Tuned with data, not by feel.** `pulserun --analyse` takes the solver's winning run and, for every jump, measures how
+many frames (1/60 s) earlier the press could have come and still survived. It found two kinds of near pixel-perfect
+jumps, which were level-design bugs rather than skill checks:
+
+- In level 3, the jump pad at x≈3050 could not clear the wall after it. Only a one-frame "jump into the pad" trick got
+  past, so the wall is now lower.
+- Saws sat exactly where a normal jump lands (levels 1, 2 and 3); they have moved.
+
+After the fixes, the tightest jump on HARD went from **1 frame to 8**. The tests now require every jump to allow at
+least 10 frames on EASY, 8 on NORMAL and 5 on HARD, and prove that every checkpoint is a safe place to respawn.
+
+Other changes from the playtest: the crashed screen retries by itself after 1.6 s (move to MAIN MENU to stop it), EASY
+skips the crashed screen entirely, and the level cards show which mode each level was cleared on.
 
 ## Group members and responsibilities
 
@@ -99,7 +149,10 @@ actual work.
 | Levels | `src/game/level.cpp`, `levels/*.txt` | Plain-text format (below) |
 | Solver | `src/game/solver.cpp` | Depth-first search over jump timings; proves every level is beatable |
 | Animation | `src/game/animation.cpp` | Flip-book `Animation`: 5-frame death burst, pad spring, orb pop |
-| Screens | `src/game/game.cpp`, `game_screens.cpp` | Menu, level select, settings, play, pause, death, complete |
+| Screens | `src/game/game.cpp`, `game_screens.cpp` | Menu, level select, settings, play, pause, death, complete, finale |
+| Difficulty | `src/game/difficulty.h`, `solver.cpp` | EASY / NORMAL / HARD rules; timing-window analyser |
+| Finale | `src/game/finale.cpp` | The game-beaten sequence, a pure function of time |
+| Recorder | `app/recorder.cpp` | Drives the game and pipes frames to ffmpeg for the demo videos |
 
 ## Level file format
 
@@ -122,11 +175,13 @@ SAW     700  430  radius=20  speed=1.5   # centre, radius, spin in turns/s
 ORB     900  350                  # centre (optional radius=)
 PAD     1200 488                  # top-left of a 50 x 12 jump pad
 PORTAL  9800 440  target=2        # centre of the exit, next level number
+CHECKPOINT 2000                   # EASY respawn point (put it in a quiet stretch)
 ```
 
 Numbers can also be written as `key=value` (`w=`, `h=`, `radius=`, `speed=`, `target=`). Errors report the line, for
-example `line 7: unknown object 'SPIKES'`. Every shipped level is checked by the test suite: idling must die early, and
-the solver must find a run that reaches the portal.
+example `line 7: unknown object 'SPIKES'`. Every shipped level is checked by the test suite: idling must die early, the
+solver must find a run that reaches the portal on every difficulty, every jump must meet that mode's timing-window
+floor, and every checkpoint must be a safe respawn.
 
 ## How to compile and run
 
@@ -139,8 +194,10 @@ cd pulserun
 cmake -S . -B build -G Ninja               # finds SDL2 if installed; otherwise builds headless
 cmake --build build
 ./build/pulserun                           # play (Windows: .\build\pulserun.exe)
-./build/test_algorithms                    # 231 checks
+./build/test_algorithms                    # 301 checks
 ./build/pulserun --showcase out            # render every game screen to PNG (no window needed)
+./build/pulserun --analyse                 # timing window of every jump, per level and difficulty
+./build/pulserun --record docs/videos --ffmpeg <path-to-ffmpeg>   # re-record the demo videos
 cmake --build build --target screenshots   # Checkpoint 1 technique demos into docs/screenshots/
 ```
 
@@ -179,7 +236,7 @@ src/game/     sprites, player, collision, level, world, solver, camera, loop, an
 src/ui/       HUD, buttons, level cards, logo
 levels/       level1.txt, level2.txt, level3.txt
 demos/        one demo per technique + the Checkpoint 1 game-style stills
-tests/        test_algorithms.cpp (231 checks)
+tests/        test_algorithms.cpp (301 checks)
 web/          the website around the live build
 docs/         screenshots and checkpoint evidence
 ```
