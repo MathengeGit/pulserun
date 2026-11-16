@@ -62,8 +62,10 @@ SPIKE 6300 450
 SPIKE 6350 450
 SAW   6700 400 radius=26 speed=1.0
 
-# --- Tunnel: ceiling over spikes, time a low hop -------------------------------
-BLOCK 6900 300 600 40
+# --- Tunnel: run under the saw, then hop the floor spikes ------------------------
+# The ceiling's underside (y=240) clears even a full held jump, so any hop works; the
+# roof (y=200) is out of reach. It was y=300, which made every hop hit the ceiling (#38).
+BLOCK 6900 200 600 40
 SPIKE 7100 450
 SPIKE 7400 450
 
