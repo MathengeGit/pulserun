@@ -1,6 +1,7 @@
 #include "game/solver.h"
 #include "game/game_loop.h"
 #include "game/world.h"
+#include <algorithm>
 #include <cmath>
 #include <unordered_set>
 
@@ -94,9 +95,14 @@ float replayPlan(const Level& level, const std::vector<uint8_t>& held, bool* com
     return w.progress();
 }
 
-std::vector<TimingWindow> timingWindows(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan,
-                                        int maxShift) {
-    // Every world state along the plan: states[i] is the world before step i.
+// ---- Difficulty analysis ----
+
+namespace {
+
+struct Press { int at, len; };
+
+// Every world state along the plan: states[i] is the world before step i.
+std::vector<World> statesOf(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan) {
     std::vector<World> states;
     states.reserve(plan.size() + 1);
     World w(&level);
@@ -108,9 +114,11 @@ std::vector<TimingWindow> timingWindows(const Level& level, const Rules& rules, 
         prev = h != 0;
     }
     states.push_back(w);
+    return states;
+}
 
-    // The press events: rising edges of `plan`, with their hold lengths.
-    struct Press { int at, len; };
+// The press events: rising edges of `plan`, with their hold lengths.
+std::vector<Press> pressesOf(const std::vector<uint8_t>& plan) {
     std::vector<Press> presses;
     for (int i = 0; i < (int)plan.size(); ++i)
         if (plan[i] && (i == 0 || !plan[i - 1])) {
@@ -118,47 +126,129 @@ std::vector<TimingWindow> timingWindows(const Level& level, const Rules& rules, 
             while (i + n < (int)plan.size() && plan[i + n]) ++n;
             presses.push_back({i, n});
         }
+    return presses;
+}
 
+// The world just before press p fires `shift` steps away from where the plan has it
+// (negative = earlier), or false if the cube dies idling first. An earlier press that would
+// overlap the previous held jump cuts that hold short, as a player does (release for one
+// step, then press): without this an orb press right after a full-length held jump could
+// never move earlier, and its window read as 1-2 frames however wide it really is (#38).
+bool shiftedStart(const std::vector<World>& states, const std::vector<Press>& presses, size_t p, int shift, World& out) {
+    const Press pr = presses[p];
+    if (shift < 0) {
+        const int at = pr.at + shift;
+        const int prevAt = p > 0 ? presses[p - 1].at : -1;
+        const int prevEnd = p > 0 ? presses[p - 1].at + presses[p - 1].len : 0;
+        if (at <= (p > 0 ? prevAt + 1 : 0)) return false;  // the previous press keeps a step
+        out = states[at];
+        if (at <= prevEnd) {  // still inside the previous hold: let go one step first
+            out = states[at - 1];
+            out.step(kDt, false, false);
+        }
+        return true;
+    }
+    out = states[pr.at];
+    for (int j = 0; j < shift; ++j) {
+        out.step(kDt, false, false);
+        if (out.dead) return false;
+    }
+    return true;
+}
+
+// Hold for `len` steps from `t`: still alive, and can the run then clear the next stretch?
+bool survivesPress(World t, int len, float goalX, int nodes, std::vector<uint8_t>* rest = nullptr) {
+    bool pv = false;
+    for (int j = 0; j < len && !t.dead && !t.complete; ++j) {
+        t.step(kDt, true, !pv);
+        pv = true;
+    }
+    if (t.dead) return false;
+    const SolveResult s = solveFrom(t, goalX, nodes);
+    if (rest) *rest = s.held;
+    return s.solved;
+}
+
+TimingWindow measure(const Level& level, const std::vector<World>& states, const std::vector<Press>& presses,
+                     size_t p, int planSize, int maxShift) {
     // Survive this far past the press: the next 1.3 s of world travel, so a shifted jump that
     // lands somewhere hopeless (e.g. straight in front of the next spike) does not count.
     const float horizon = level.speed * 1.3f;
-    // Does pressing at step `at` (holding `len` steps) still lead to a survivable state?
-    auto survives = [&](World t, int len, float fromX) {
-        bool pv = false;
-        for (int j = 0; j < len && !t.dead && !t.complete; ++j) {
-            t.step(kDt, true, !pv);
-            pv = true;
-        }
-        if (t.dead) return false;
-        return solveFrom(t, fromX + horizon, 3000).solved;
-    };
+    const Press pr = presses[p];
+    TimingWindow win;
+    win.step = pr.at;
+    win.x = states[pr.at].player.pos.x;
+    win.orb = !states[pr.at].player.on_ground;
+    World t;
+    for (int k = 1; k <= maxShift; ++k) {
+        if (!shiftedStart(states, presses, p, -k, t) || !survivesPress(t, pr.len, win.x + horizon, 3000)) break;
+        win.early = k;
+    }
+    // Later: the delayed press must start before the next press.
+    const int nextAt = p + 1 < presses.size() ? presses[p + 1].at : planSize;
+    for (int k = 1; k <= maxShift && pr.at + k + pr.len < nextAt; ++k) {
+        if (!shiftedStart(states, presses, p, k, t) || !survivesPress(t, pr.len, win.x + horizon, 3000)) break;
+        win.late = k;
+    }
+    return win;
+}
 
+}  // namespace
+
+std::vector<TimingWindow> timingWindows(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan,
+                                        int maxShift) {
+    const std::vector<World> states = statesOf(level, rules, plan);
+    const std::vector<Press> presses = pressesOf(plan);
     std::vector<TimingWindow> out;
-    for (size_t p = 0; p < presses.size(); ++p) {
-        const Press pr = presses[p];
-        TimingWindow win;
-        win.step = pr.at;
-        win.x = states[pr.at].player.pos.x;
-        win.orb = !states[pr.at].player.on_ground;
-        // Earlier: the preceding steps must be idle (no overlap with the previous press).
-        const int prevEnd = p > 0 ? presses[p - 1].at + presses[p - 1].len : 0;
-        for (int k = 1; k <= maxShift && pr.at - k > prevEnd; ++k) {
-            if (!survives(states[pr.at - k], pr.len, win.x)) break;
-            win.early = k;
-        }
-        // Later: the delayed press must start before the cube dies idling, and before the next press.
-        const int nextAt = p + 1 < presses.size() ? presses[p + 1].at : (int)plan.size();
-        for (int k = 1; k <= maxShift && pr.at + k + pr.len < nextAt; ++k) {
-            World t = states[pr.at];
-            bool alive = true;
-            for (int j = 0; j < k && alive; ++j) {
-                t.step(kDt, false, false);
-                alive = !t.dead;
+    for (size_t p = 0; p < presses.size(); ++p)
+        out.push_back(measure(level, states, presses, p, (int)plan.size(), maxShift));
+    return out;
+}
+
+std::vector<uint8_t> centrePlan(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan, int maxShift) {
+    // A move must not just push the problem onto the next press: score a plan at press p by
+    // the smaller of the windows of p and p + 1, and keep a move only if that improves.
+    auto score = [&](const std::vector<uint8_t>& pl, size_t p) {
+        const std::vector<World> states = statesOf(level, rules, pl);
+        const std::vector<Press> presses = pressesOf(pl);
+        int s = 1 << 20;
+        for (size_t q = p; q < presses.size() && q <= p + 1; ++q)
+            s = std::min(s, measure(level, states, presses, q, (int)pl.size(), maxShift).frames());
+        return s;
+    };
+    std::vector<uint8_t> out = plan;
+    for (size_t p = 0;; ++p) {
+        const std::vector<Press> presses = pressesOf(out);
+        if (p >= presses.size()) break;
+        const std::vector<World> states = statesOf(level, rules, out);
+        const TimingWindow w = measure(level, states, presses, p, (int)out.size(), maxShift);
+        const int centre = (w.late - w.early) / 2;  // steps to the middle of the window
+        if (centre == 0) continue;
+        int best = score(out, p);
+        std::vector<uint8_t> bestPlan = out;
+        for (int shift : {centre, centre / 2}) {
+            World t;
+            std::vector<uint8_t> rest;
+            if (shift == 0 || !shiftedStart(states, presses, p, shift, t) ||
+                !survivesPress(t, presses[p].len, 1e30f, 400000, &rest))
+                continue;  // cannot finish the level from the moved press
+            const int at = presses[p].at + shift;
+            // Inputs up to the new press: the plan's own, then idle steps for a later press, or
+            // a one-step release when an earlier press cuts the previous hold short.
+            std::vector<uint8_t> next(out.begin(), out.begin() + std::min(at, presses[p].at));
+            next.resize(at, 0);
+            if (shift < 0 && at > 0) next[at - 1] = 0;
+            next.insert(next.end(), presses[p].len, 1);
+            next.insert(next.end(), rest.begin(), rest.end());
+            bool completed = false;
+            if (replayPlan(level, next, &completed, rules) < 1.0f || !completed) continue;
+            const int s = score(next, p);
+            if (s > best) {
+                best = s;
+                bestPlan = next;
             }
-            if (!alive || !survives(t, pr.len, win.x)) break;
-            win.late = k;
         }
-        out.push_back(win);
+        out = bestPlan;
     }
     return out;
 }

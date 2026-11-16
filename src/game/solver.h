@@ -41,3 +41,9 @@ struct TimingWindow {
 };
 std::vector<TimingWindow> timingWindows(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan,
                                         int maxShift = 18);
+// The solver waits as long as it can at every decision, so its plan presses at the late edge
+// of most windows: a run no player aims for. This re-times a solved plan press by press,
+// moving each to the middle of its window and re-solving the rest of the level from there,
+// so the windows are measured on the run a player would aim for (#38). Still completes.
+std::vector<uint8_t> centrePlan(const Level& level, const Rules& rules, const std::vector<uint8_t>& plan,
+                                int maxShift = 18);
