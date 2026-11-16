@@ -180,7 +180,7 @@ int runAnalyse(const std::vector<Level>& levels) {
                 ++bad;
                 continue;
             }
-            std::vector<TimingWindow> w = timingWindows(l, r, s.held);
+            std::vector<TimingWindow> w = timingWindows(l, r, centrePlan(l, r, s.held));
             std::vector<int> f;
             for (const TimingWindow& t : w) f.push_back(t.frames());
             std::vector<int> sorted = f;

@@ -62,7 +62,7 @@ finish the level. Best %, best time and attempts are saved (browser `localStorag
 | Level | Name | Length | Speed | Teaches |
 |---|---|---|---|---|
 | 1 | PRIMER | 10 000 px | 420 px/s | single, double, triple spikes; orbs; saws; blocks; a pad |
-| 2 | ESCALATION | 12 000 px | 460 px/s | orb chains, low ceilings, pads onto platforms, riding a roof |
+| 2 | ESCALATION | 12 000 px | 460 px/s | orb chains, low ceilings, pads onto platforms, a tunnel to hop through |
 | 3 | ADVANCED | 14 000 px | 520 px/s | a tunnel (tap, don't hold), saw gauntlet, rising platforms |
 
 Finishing level 3 after clearing every level rolls the **finale**: the cube escapes the last portal, the levels stamp
@@ -86,13 +86,18 @@ in **Settings** or with the **MODE** button on the level select screen. All thre
 Slowing the **world clock** rather than the run speed keeps every jump arc identical, so a level that is beatable on
 HARD is beatable on every mode; the player just gets more time to react. The rules live in `src/game/difficulty.h`.
 
-**Tuned with data, not by feel.** `pulserun --analyse` takes the solver's winning run and, for every jump, measures how
-many frames (1/60 s) earlier the press could have come and still survived. It found two kinds of near pixel-perfect
+**Tuned with data, not by feel.** `pulserun --analyse` takes the solver's winning run, re-times every press to the
+middle of its window (the solver itself always presses as late as it can, a run no player aims for), and measures how
+many frames (1/60 s) earlier or later each press could have come and still survived. It found two kinds of near pixel-perfect
 jumps, which were level-design bugs rather than skill checks:
 
 - In level 3, the jump pad at x≈3050 could not clear the wall after it. Only a one-frame "jump into the pad" trick got
   past, so the wall is now lower.
 - Saws sat exactly where a normal jump lands (levels 1, 2 and 3); they have moved.
+- In level 2, the tunnel at 60 % was too low to hop inside: every jump over its floor spikes hit the ceiling, and the
+  only way through was a hidden full-hold jump over the floating saw onto the roof (4 px to spare). The ceiling is now
+  higher, so any hop works with an 18-frame window on NORMAL (#38). The solver had found the roof trick, so a test now
+  checks the intended route directly.
 
 After the fixes, the tightest jump on HARD went from **1 frame to 8**. The tests now require every jump to allow at
 least 10 frames on EASY, 8 on NORMAL and 5 on HARD, and prove that every checkpoint is a safe place to respawn.
@@ -194,7 +199,7 @@ cd pulserun
 cmake -S . -B build -G Ninja               # finds SDL2 if installed; otherwise builds headless
 cmake --build build
 ./build/pulserun                           # play (Windows: .\build\pulserun.exe)
-./build/test_algorithms                    # 301 checks
+./build/test_algorithms                    # 315 checks
 ./build/pulserun --showcase out            # render every game screen to PNG (no window needed)
 ./build/pulserun --analyse                 # timing window of every jump, per level and difficulty
 ./build/pulserun --record docs/videos --ffmpeg <path-to-ffmpeg>   # re-record the demo videos
@@ -236,7 +241,7 @@ src/game/     sprites, player, collision, level, world, solver, camera, loop, an
 src/ui/       HUD, buttons, level cards, logo
 levels/       level1.txt, level2.txt, level3.txt
 demos/        one demo per technique + the Checkpoint 1 game-style stills
-tests/        test_algorithms.cpp (301 checks)
+tests/        test_algorithms.cpp (315 checks)
 web/          the website around the live build
 docs/         screenshots and checkpoint evidence
 ```

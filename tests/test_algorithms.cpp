@@ -820,11 +820,66 @@ static void testLevelsOnEveryDifficulty() {
             bool completed = false;
             CHECK(replayPlan(l, s.held, &completed, r) == 1.0f && completed);
             int worst = 99;
-            for (const TimingWindow& w : timingWindows(l, r, s.held)) worst = std::min(worst, w.frames());
+            for (const TimingWindow& w : timingWindows(l, r, centrePlan(l, r, s.held))) worst = std::min(worst, w.frames());
             CHECK(worst >= floorFrames[d]);
             if (worst < floorFrames[d])
                 std::cout << "  " << l.name << " " << r.name << " tightest window " << worst << " frames\n";
         }
+}
+
+// Level 2's tunnel (#38): the ceiling used to sit so low that every hop over its floor spikes
+// hit the underside, leaving only a hidden full-hold jump onto the roof. The solver found that
+// trick, so a level can be "beatable" and still unfair: test the intended route directly.
+static void testLevel2Tunnel() {
+    const std::vector<Level> levels = shippedLevels();
+    CHECK(levels.size() >= 2);
+    if (levels.size() < 2) return;
+    const Level& l = levels[1];
+    // Standing on the floor at `from`: one press at step p, held `hold` steps. Alive at `until`?
+    auto hop = [&](const Rules& r, float from, float until, int p, int hold) {
+        World w(&l);
+        w.setRules(r);
+        w.spawnAt(from);
+        bool prev = false;
+        for (int i = 0; i < 2000 && !w.dead && w.player.pos.x < until; ++i) {
+            const bool held = i >= p && i < p + hold;
+            w.step(1.0f / 60, held, held && !prev);
+            prev = held;
+        }
+        return !w.dead;
+    };
+    const int fullHold = (int)std::ceil(Player::HOLD_MAX * 60);
+    for (int d = 0; d < kDifficultyCount; ++d) {
+        const Rules r = rulesFor((Difficulty)d);
+        // Each floor spike (7100, 7400): a tap and a full hold both get a window of 12+ frames.
+        const float spikes[][2] = {{6950, 7300}, {7250, 7600}};
+        for (const auto& s : spikes)
+            for (int hold : {1, fullHold}) {
+                int frames = 0;
+                for (int p = 0; p < 60; ++p) frames += hop(r, s[0], s[1], p, hold);
+                CHECK(frames >= 12);
+                if (frames < 12)
+                    std::cout << "  tunnel " << r.name << " spike after " << s[0] << " hold " << hold << ": "
+                              << frames << " frames\n";
+            }
+    }
+    // The roof is out of reach: no jump from the run-up ever stands on top of the tunnel.
+    bool roof = false;
+    const Rules easy = rulesFor(Difficulty::Easy);
+    for (int p = 0; p < 80 && !roof; ++p)
+        for (int hold = 1; hold <= fullHold + 4 && !roof; ++hold) {
+            World w(&l);
+            w.setRules(easy);
+            w.spawnAt(6420);
+            bool prev = false;
+            for (int i = 0; i < 2000 && !w.dead && w.player.pos.x < 7000; ++i) {
+                const bool held = i >= p && i < p + hold;
+                w.step(1.0f / 60, held, held && !prev);
+                prev = held;
+            }
+            roof = !w.dead && w.player.on_ground && w.player.bottom() < 450;
+        }
+    CHECK(!roof);
 }
 
 static void testCheckpoints() {
@@ -931,6 +986,7 @@ int main() {
     testCoverageExtras();
     testDifficulty();
     testLevelsOnEveryDifficulty();
+    testLevel2Tunnel();
     testCheckpoints();
     testFinaleFlow();
     std::cout << (g_checks - g_failures) << "/" << g_checks << " checks passed\n";
